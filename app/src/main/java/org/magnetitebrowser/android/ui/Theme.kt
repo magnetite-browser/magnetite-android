@@ -1,0 +1,45 @@
+package org.magnetitebrowser.android.ui
+
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+import uniffi.magnetite_mobile_core.Space
+
+/** Magnetite's own colour, where a space has none. */
+private val Accent = Color(0xFFE2622B)
+
+/** The app's look, light or dark as the system is, with `tint` for buttons and marks. */
+@Composable
+fun MagnetiteTheme(tint: Color?, content: @Composable () -> Unit) {
+    val accent = tint ?: Accent
+    val colors = if (isSystemInDarkTheme()) {
+        darkColorScheme(
+            primary = accent, onPrimary = Color.White,
+            background = Color(0xFF121214), surface = Color(0xFF121214),
+            surfaceContainer = Color(0xFF1C1C1F), surfaceContainerLow = Color(0xFF1C1C1F),
+            surfaceContainerHigh = Color(0xFF26262A), surfaceVariant = Color(0xFF2A2A2E),
+            secondaryContainer = accent.copy(alpha = 0.28f), onSecondaryContainer = Color.White,
+        )
+    } else {
+        lightColorScheme(
+            primary = accent, onPrimary = Color.White,
+            background = Color.White, surface = Color.White,
+            surfaceContainer = Color(0xFFF4F4F6), surfaceContainerLow = Color(0xFFF4F4F6),
+            surfaceContainerHigh = Color(0xFFECECEF), surfaceVariant = Color(0xFFECECEF),
+            secondaryContainer = accent.copy(alpha = 0.18f), onSecondaryContainer = Color(0xFF1B1B1F),
+        )
+    }
+    MaterialTheme(colorScheme = colors, content = content)
+}
+
+/** The space's colour; none: the app's own. */
+val Space.tint: Color? get() = accent?.let { Color(it.red, it.green, it.blue) }
+
+/**
+ * The icon when it is an emoji. The desktop's named icons are not drawn
+ * here.
+ */
+val Space.emoji: String? get() = icon?.takeIf { text -> text.codePoints().anyMatch { it > 0x238C } }

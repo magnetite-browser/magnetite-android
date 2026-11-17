@@ -1,0 +1,9 @@
+# The shared core, built by scripts/core.sh.
+/core/
+.gradle/
+build/
+local.properties
+.kotlin/
+.idea/
+*.iml
+.DS_Store

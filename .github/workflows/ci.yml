@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # By hand (Actions → CI → Run workflow): a run that failed to start cannot be re-run.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The app with the shared core, as scripts/core.sh and Gradle build it, and
+  # Android's lint. The UI tests need an emulator and are run by hand.
+  build:
+    name: Build and lint
+    runs-on: ubuntu-24.04
+    env:
+      MAGNETITE_MOBILE_CORE: ${{ github.workspace }}/magnetite-mobile-core
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fetch the core
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: magnetite-browser/magnetite-mobile-core
+          path: magnetite-mobile-core
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: magnetite-mobile-core
+      - name: Build the core
+        run: |
+          cargo install cargo-ndk --locked
+          ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" scripts/core.sh
+      - name: Build and lint
+        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest lintDebug

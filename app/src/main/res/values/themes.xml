@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- What shows until the first frame is drawn; the look is set in ui/Theme.kt. -->
+    <style name="Theme.Magnetite" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
