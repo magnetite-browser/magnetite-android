@@ -46,6 +46,12 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.webkit:webkit:1.18.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    // The scanner for a sync code's QR code: the camera, and a reader that
+    // works on the device alone.
+    implementation("androidx.camera:camera-camera2:1.7.0")
+    implementation("androidx.camera:camera-lifecycle:1.7.0")
+    implementation("androidx.camera:camera-view:1.7.0")
+    implementation("com.google.zxing:core:3.5.4")
     // The core's bindings call the library through JNA.
     implementation("net.java.dev.jna:jna:5.19.1@aar")
 
