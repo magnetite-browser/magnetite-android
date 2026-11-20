@@ -4,7 +4,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- To scan the QR code of a sync code; a device without a camera can type the words. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- The permission alone would make a camera with autofocus required. -->
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <!-- A browser opens pages without https too, so cleartext is allowed.
          Nothing of the app's data is in the system's backup: tabs, cookies

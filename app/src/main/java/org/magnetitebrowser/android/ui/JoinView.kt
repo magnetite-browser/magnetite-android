@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -77,9 +78,13 @@ fun JoinView(browser: Browser, onDone: () -> Unit) {
     val complete = words.split(Regex("\\s+")).count { it.isNotEmpty() } == 24 && !(ownServer && address.isBlank())
     val plain = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false)
 
+    // One join at a time: a second one would write over the first one's chain.
+    var joining by remember { mutableStateOf(false) }
     val join = { server: String, code: String ->
-        scope.launch {
+        if (!joining) scope.launch {
+            joining = true
             sync.join(server, code)
+            joining = false
             if (sync.joined) {
                 browser.syncNow()
                 onDone()
@@ -88,7 +93,7 @@ fun JoinView(browser: Browser, onDone: () -> Unit) {
     }
 
     Screen("Join a Sync Chain", onDone) {
-        OutlinedButton(onClick = { scanning = true }, Modifier.fillMaxWidth().testTag("join.scan")) {
+        OutlinedButton(onClick = { scanning = true }, Modifier.fillMaxWidth().testTag("join.scan"), enabled = !sync.busy) {
             Text("Scan QR Code")
         }
         Hint("On your computer: Settings → Sync → Show sync code. Or enter its server and words below.")

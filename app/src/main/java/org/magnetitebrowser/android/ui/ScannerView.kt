@@ -69,6 +69,8 @@ private fun Camera(onRead: (JoinLink) -> Unit) {
     val owner = LocalLifecycleOwner.current
     val read by rememberUpdatedState(onRead)
     val frames = remember { Executors.newSingleThreadExecutor() }
+    // Read and written on the main thread only: false once the scanner is gone.
+    var shown by remember { mutableStateOf(true) }
     val camera = remember {
         LifecycleCameraController(context).apply {
             setEnabledUseCases(CameraController.IMAGE_ANALYSIS)
@@ -78,16 +80,26 @@ private fun Camera(onRead: (JoinLink) -> Unit) {
                     ResolutionStrategy(Size(1280, 720), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
                 )
                 .build()
+            // Only the frames' thread touches it: one link is handed on, not one per frame.
+            var found = false
             setImageAnalysisAnalyzer(frames) { frame ->
-                val link = frame.use(::qrText)?.let(JoinLink::parse) ?: return@setImageAnalysisAnalyzer
-                clearImageAnalysisAnalyzer()
-                ContextCompat.getMainExecutor(context).execute { read(link) }
+                val link = frame.use(::qrText)?.let(JoinLink::parse)
+                if (link == null || found) return@setImageAnalysisAnalyzer
+                found = true
+                // The controller is the main thread's, and a link read just
+                // as the scanner was closed is dropped.
+                ContextCompat.getMainExecutor(context).execute {
+                    if (!shown) return@execute
+                    clearImageAnalysisAnalyzer()
+                    read(link)
+                }
             }
         }
     }
     DisposableEffect(owner) {
         camera.bindToLifecycle(owner)
         onDispose {
+            shown = false
             camera.unbind()
             frames.shutdown()
         }
