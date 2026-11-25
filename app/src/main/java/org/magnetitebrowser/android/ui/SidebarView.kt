@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,16 +31,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -46,6 +57,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -53,18 +65,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -86,6 +107,10 @@ import uniffi.magnetite_mobile_core.Row as PinnedRow
  * pinned tree, the tabs open here and the Today tabs of the other devices.
  * The start page (its pages keep clear of `insets`), a sheet over a page
  * (`onClose` closes it), and on a wide screen the column beside it.
+ *
+ * In a chain, holding an item renames or removes it, and "+" beside the
+ * spaces adds one. A desktop of the chain makes the change (`Sync`); until
+ * then it shows with a mark that it waits.
  */
 @Composable
 fun SidebarView(
@@ -100,6 +125,8 @@ fun SidebarView(
     val pager = rememberPagerState(front) { spaces.size }
     /** Folders folded shut, by id, in every space. Open is the usual state. */
     var folded by rememberSaveable { mutableStateOf(setOf<String>()) }
+    /** What is being renamed, or named (a new space). */
+    var naming by remember { mutableStateOf<Naming?>(null) }
 
     // A page swiped to is the space in front; a space picked otherwise is swiped to.
     LaunchedEffect(pager) {
@@ -118,12 +145,61 @@ fun SidebarView(
                 SpacePage(
                     browser, space, folded,
                     fold = { id -> folded = if (id in folded) folded - id else folded + id },
+                    rename = { id, title -> naming = Naming(id, title) },
                     onSettings, onJoin, onClose,
                 )
             }
         }
-        if (spaces.size > 1) SpaceSwitcher(browser, Modifier.align(Alignment.CenterHorizontally).padding(6.dp))
+        if (spaces.size > 1 || browser.sync.joined) {
+            SpaceSwitcher(browser, add = { naming = Naming(null, "") }, Modifier.align(Alignment.CenterHorizontally).padding(6.dp))
+        }
     }
+    naming?.let { item -> NameDialog(browser, item) { naming = null } }
+}
+
+/** Something being named: item `id` to rename, with its name so far, or a new space (no `id`). */
+private data class Naming(val id: String?, val title: String)
+
+/** A name for `item`; the change goes to a desktop of the chain. */
+@Composable
+private fun NameDialog(browser: Browser, item: Naming, close: () -> Unit) {
+    var name by remember { mutableStateOf(TextFieldValue(item.title, TextRange(0, item.title.length))) }
+    val field = remember { FocusRequester() }
+    LaunchedEffect(Unit) { field.requestFocus() }
+    val title = name.text.trim()
+    fun save() {
+        close()
+        val id = item.id
+        if (id != null) {
+            browser.change { it.rename(id, title) }
+        } else {
+            browser.change { sync ->
+                sync.newSpace(title)
+                // The new space is the last one: show it.
+                browser.spaces.lastOrNull()?.let(browser::show)
+            }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = close,
+        title = { Text(if (item.id == null) "New Space" else "Rename") },
+        text = {
+            // A dialog is a window of its own: its tags need saying again for UI tests.
+            Column(Modifier.semantics { testTagsAsResourceId = true }, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Your computer makes the change when it syncs.")
+                OutlinedTextField(
+                    name, { name = it }, Modifier.focusRequester(field).testTag("name"),
+                    label = { Text("Name") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { if (title.isNotEmpty()) save() }),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = ::save, enabled = title.isNotEmpty()) { Text(if (item.id == null) "Add" else "Rename") }
+        },
+        dismissButton = { TextButton(onClick = close) { Text("Cancel") } },
+    )
 }
 
 /** A soft wash of the space's colour from the top, as the desktop tints its sidebar. */
@@ -135,9 +211,9 @@ private fun Modifier.spaceWash(space: Space): Modifier {
     return background(ground).background(Brush.verticalGradient(0f to wash, 0.45f to Color.Transparent))
 }
 
-/** The spaces' icons, the one in front marked; a tap shows that space. */
+/** The spaces' icons, the one in front marked; a tap shows that space. In a chain, "+" adds a space (`add`). */
 @Composable
-private fun SpaceSwitcher(browser: Browser, modifier: Modifier) {
+private fun SpaceSwitcher(browser: Browser, add: () -> Unit, modifier: Modifier) {
     Floating(modifier) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             for (space in browser.spaces) {
@@ -156,6 +232,11 @@ private fun SpaceSwitcher(browser: Browser, modifier: Modifier) {
                     SpaceIcon(space, 20.dp)
                 }
             }
+            if (browser.sync.joined) {
+                IconButton(onClick = add, Modifier.size(40.dp, 36.dp)) {
+                    Icon(Icons.Default.Add, "New Space", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     }
 }
@@ -168,24 +249,60 @@ private fun SpacePage(
     space: Space,
     folded: Set<String>,
     fold: (String) -> Unit,
+    rename: (id: String, title: String) -> Unit,
     onSettings: () -> Unit,
     onJoin: () -> Unit,
     onClose: (() -> Unit)?,
 ) {
+    // Items can be changed: the sidebar is a chain's.
+    val editable = browser.sync.joined
+    val renaming = rememberVectorPainter(Icons.Outlined.Edit)
+    fun renameItem(id: String, title: String) = Edit("Rename…", renaming) { rename(id, title) }
+    val unpinning = painterResource(R.drawable.ic_unpin)
+    val removing = rememberVectorPainter(Icons.Outlined.Delete)
+
     val list = @Composable {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 24.dp)) {
-            item { Header(space, onSettings, onClose) }
+            item {
+                // The private space keeps its name, as on the desktop.
+                val edits = if (editable && !space.ephemeral) listOf(Edit("Rename Space…", renaming) { rename(space.id, space.title) }) else emptyList()
+                Header(space, edits, onSettings, onClose)
+            }
             if (!browser.sync.joined) item { Invitation(onJoin) }
             // Pages open in this page's space: while the pager moves, the
             // space in front may still be the one before.
-            if (space.favorites.isNotEmpty()) item { Favorites(space.favorites) { browser.open(it, space.id) } }
+            if (space.favorites.isNotEmpty()) {
+                item {
+                    Favorites(space.favorites, { browser.open(it, space.id) }) { page ->
+                        if (!editable) return@Favorites emptyList()
+                        listOf(
+                            renameItem(page.id, page.title),
+                            Edit("Remove from Favorites", removing, danger = true) { browser.change { it.remove(page.id) } },
+                        )
+                    }
+                }
+            }
             if (space.pinned.isNotEmpty()) {
                 section("Pinned")
                 items(visible(space.pinned, folded)) { row ->
                     Box(Modifier.padding(start = 20.dp * minOf(row.depth.toInt(), 6))) {
                         when (val item = row.item) {
-                            is RowItem.Folder -> FolderRow(item.title, item.smart, open = item.id !in folded) { fold(item.id) }
-                            is RowItem.Page -> PageRow(item.page.title, item.page.url, onOpen = { browser.open(item.page, space.id) })
+                            is RowItem.Folder -> FolderRow(
+                                item.title, item.smart, open = item.id !in folded, item.pending,
+                                if (editable) listOf(renameItem(item.id, item.title)) else emptyList(),
+                            ) { fold(item.id) }
+                            is RowItem.Page -> PageRow(
+                                item.page.title, item.page.url, pending = item.page.pending,
+                                edits = if (editable) {
+                                    listOf(
+                                        renameItem(item.page.id, item.page.title),
+                                        Edit("Unpin", unpinning, danger = true) { browser.change { it.remove(item.page.id) } },
+                                    )
+                                } else {
+                                    emptyList()
+                                },
+                                onOpen = { browser.open(item.page, space.id) },
+                            )
                         }
                     }
                 }
@@ -208,16 +325,30 @@ private fun SpacePage(
     }
 }
 
-/** The space's icon and name, and the way to Settings (and out of the sheet). */
+/**
+ * The space's icon and name, which holding offers `edits` for, and the way
+ * to Settings (and out of the sheet).
+ */
 @Composable
-private fun Header(space: Space, onSettings: () -> Unit, onClose: (() -> Unit)?) {
+private fun Header(space: Space, edits: List<Edit>, onSettings: () -> Unit, onClose: (() -> Unit)?) {
     Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        SpaceIcon(space, 26.dp)
-        Text(
-            space.title, Modifier.weight(1f).padding(start = 10.dp).semantics { heading() },
-            style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold,
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
-        )
+        Holdable(edits, Modifier.weight(1f)) { hold ->
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    // Only held: a tap on the name does nothing.
+                    .then(if (hold != null) Modifier.combinedClickable(onLongClick = hold, onClick = {}) else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SpaceIcon(space, 26.dp)
+                Text(
+                    space.title, Modifier.weight(1f, fill = false).padding(start = 10.dp).semantics { heading() },
+                    style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                if (space.pending) Waiting(Modifier.padding(start = 8.dp))
+            }
+        }
         IconButton(onClick = onSettings) {
             Icon(Icons.Outlined.Settings, "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -266,18 +397,25 @@ private fun Note(text: String) {
     )
 }
 
-/** The favorites, four to a row. */
+/** The favorites, four to a row; holding one offers its `edits`. */
 @Composable
-private fun Favorites(pages: List<Page>, open: (Page) -> Unit) {
+private fun Favorites(pages: List<Page>, open: (Page) -> Unit, edits: (Page) -> List<Edit>) {
     Column(Modifier.padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         for (row in pages.chunked(4)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                for (page in row) {
+                for (page in row) Holdable(edits(page), Modifier.weight(1f)) { hold ->
                     Column(
-                        Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable { open(page) }.padding(vertical = 4.dp),
+                        Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .combinedClickable(onLongClick = hold) { open(page) }
+                            // Room above the tile for the waiting mark on its corner.
+                            .padding(top = 6.dp, bottom = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        SiteMark(page.title, page.url, 58.dp)
+                        Box {
+                            SiteMark(page.title, page.url, 58.dp)
+                            if (page.pending) Waiting(Modifier.align(Alignment.TopEnd).offset(5.dp, (-5).dp))
+                        }
                         Text(
                             page.title.ifEmpty { Address.site(page.url) }, Modifier.padding(top = 7.dp),
                             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -339,10 +477,19 @@ private fun Invitation(onJoin: () -> Unit) {
 /**
  * A page in a list: its mark, title and site; with `onClose`, a button to
  * close it. `marked`: the tab on screen, on a wash of the space's colour
- * that reaches past the rows' edge.
+ * that reaches past the rows' edge; `pending`: a change no desktop made
+ * yet. Holding it offers its `edits`.
  */
 @Composable
-private fun PageRow(title: String, url: String, marked: Boolean = false, onOpen: () -> Unit, onClose: (() -> Unit)? = null) {
+private fun PageRow(
+    title: String,
+    url: String,
+    marked: Boolean = false,
+    pending: Boolean = false,
+    edits: List<Edit> = emptyList(),
+    onOpen: () -> Unit,
+    onClose: (() -> Unit)? = null,
+) = Holdable(edits) { hold ->
     val wash = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
     Row(
         Modifier
@@ -354,16 +501,19 @@ private fun PageRow(title: String, url: String, marked: Boolean = false, onOpen:
                 }
             }
             .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onOpen)
+            .combinedClickable(onLongClick = hold, onClick = onOpen)
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         SiteMark(title, url, 32.dp)
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(
-                title.ifEmpty { Address.site(url) }, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                fontWeight = if (marked) FontWeight.SemiBold else FontWeight.Normal,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title.ifEmpty { Address.site(url) }, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    fontWeight = if (marked) FontWeight.SemiBold else FontWeight.Normal,
+                )
+                if (pending) Waiting(Modifier.padding(start = 6.dp))
+            }
             Text(
                 Address.site(url), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -377,17 +527,25 @@ private fun PageRow(title: String, url: String, marked: Boolean = false, onOpen:
     }
 }
 
+/** A folder of the pinned tree; a tap folds it, holding it offers its `edits`. */
 @Composable
-private fun FolderRow(title: String, smart: Boolean, open: Boolean, toggle: () -> Unit) {
+private fun FolderRow(title: String, smart: Boolean, open: Boolean, pending: Boolean, edits: List<Edit>, toggle: () -> Unit) = Holdable(edits) { hold ->
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = toggle).padding(vertical = 8.dp),
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .combinedClickable(onLongClick = hold, onClick = toggle)
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(32.dp), contentAlignment = Alignment.Center) {
             Icon(painterResource(R.drawable.ic_folder), null, tint = MaterialTheme.colorScheme.primary)
         }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (pending) Waiting(Modifier.padding(start = 6.dp))
+            }
             if (smart) {
                 Text(
                     "Fills itself on the desktop",
@@ -403,6 +561,47 @@ private fun FolderRow(title: String, smart: Boolean, open: Boolean, toggle: () -
         }
         Spacer(Modifier.width(6.dp))
     }
+}
+
+/** Something holding an item offers: a change for a desktop of the chain to make. */
+private class Edit(val label: String, val icon: Painter, val danger: Boolean = false, val run: () -> Unit)
+
+/**
+ * `content` with the menu of its `edits` below it. `content` gets what its
+ * long press does: open the menu; none without edits.
+ */
+@Composable
+private fun Holdable(edits: List<Edit>, modifier: Modifier = Modifier, content: @Composable (hold: (() -> Unit)?) -> Unit) {
+    var shown by remember { mutableStateOf(false) }
+    Box(modifier) {
+        content(if (edits.isEmpty()) null else ({ shown = true }))
+        DropdownMenu(expanded = shown, onDismissRequest = { shown = false }) {
+            for (edit in edits) {
+                val color = if (edit.danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                DropdownMenuItem(
+                    text = { Text(edit.label, color = color) },
+                    leadingIcon = { Icon(edit.icon, null, tint = color) },
+                    onClick = {
+                        shown = false
+                        edit.run()
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** The mark of a change made here that no desktop of the chain made yet. */
+@Composable
+private fun Waiting(modifier: Modifier = Modifier) {
+    Icon(
+        painterResource(R.drawable.ic_waiting), "Waiting for your computer",
+        modifier
+            .size(18.dp)
+            .background(MaterialTheme.colorScheme.background, CircleShape)
+            .padding(2.dp),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 /**

@@ -224,6 +224,17 @@ class Browser(
         save()
     }
 
+    /**
+     * Make a change to the chain's sidebar (`Sync`), then tell the chain at
+     * once, so a desktop makes it soon.
+     */
+    fun change(make: suspend (Sync) -> Unit) {
+        scope.launch {
+            make(sync)
+            shareTabs()
+        }
+    }
+
     /** Read the chain's sidebar, then tell the chain about the tabs here. */
     suspend fun syncNow() {
         sync.refresh()
