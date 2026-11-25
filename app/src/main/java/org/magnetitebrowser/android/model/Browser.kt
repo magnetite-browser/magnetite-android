@@ -141,10 +141,10 @@ class Browser(
         save()
     }
 
-    /** Show the tab of sidebar item `page`, opening one if there is none. */
-    fun open(page: Page) {
-        val tab = tabs.firstOrNull { it.origin == page.id && it.space == space.id }
-        if (tab != null) show(tab) else open(page.url, page.id)
+    /** Show the tab of sidebar item `page` in `space`, opening one if there is none. */
+    fun open(page: Page, space: String = this.space.id) {
+        val tab = tabs.firstOrNull { it.origin == page.id && it.space == space }
+        if (tab != null) show(tab) else open(page.url, page.id, space = space)
     }
 
     /** The search engine Settings chose, as a template (`Address.engines`). */
@@ -358,7 +358,7 @@ class Browser(
         private const val PRIVATE = "private-"
 
         /** The space of a device that is in no chain. */
-        val HOME = Space("home", "Home", "home", null, "home", false, emptyList(), emptyList(), emptyList())
+        val HOME = Space("home", "Home", "home", null, "home", false, emptyList(), emptyList(), emptyList(), false)
 
         private fun JSONArray.tabs() = (0 until length()).map { Tab.of(getJSONObject(it)) }
     }

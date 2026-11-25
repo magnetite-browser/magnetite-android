@@ -127,7 +127,7 @@ class Sync(context: Context) {
         val code = secret.read() ?: return emptyList()
         val device = device()
         return try {
-            withContext(Dispatchers.IO) { exchange(server, code, device, tabs) }
+            withContext(Dispatchers.IO) { exchange(server, code, device, tabs, dir) }
         } catch (e: Exception) {
             lastError = text(e)
             emptyList()

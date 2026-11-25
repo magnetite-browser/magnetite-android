@@ -176,14 +176,16 @@ private fun SpacePage(
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 24.dp)) {
             item { Header(space, onSettings, onClose) }
             if (!browser.sync.joined) item { Invitation(onJoin) }
-            if (space.favorites.isNotEmpty()) item { Favorites(space.favorites, browser::open) }
+            // Pages open in this page's space: while the pager moves, the
+            // space in front may still be the one before.
+            if (space.favorites.isNotEmpty()) item { Favorites(space.favorites) { browser.open(it, space.id) } }
             if (space.pinned.isNotEmpty()) {
                 section("Pinned")
                 items(visible(space.pinned, folded)) { row ->
                     Box(Modifier.padding(start = 20.dp * minOf(row.depth.toInt(), 6))) {
                         when (val item = row.item) {
                             is RowItem.Folder -> FolderRow(item.title, item.smart, open = item.id !in folded) { fold(item.id) }
-                            is RowItem.Page -> PageRow(item.page.title, item.page.url, onOpen = { browser.open(item.page) })
+                            is RowItem.Page -> PageRow(item.page.title, item.page.url, onOpen = { browser.open(item.page, space.id) })
                         }
                     }
                 }
@@ -194,7 +196,7 @@ private fun SpacePage(
             if (space.today.isNotEmpty()) {
                 section("On your other devices")
                 items(space.today, key = { "today-" + it.id }) { page ->
-                    PageRow(page.title, page.url, onOpen = { browser.open(page) })
+                    PageRow(page.title, page.url, onOpen = { browser.open(page, space.id) })
                 }
             }
         }
