@@ -137,7 +137,12 @@ private fun Narrow(browser: Browser, page: WebPage?, sidebar: @Composable (Boole
         val tab = browser.frontTab
         if (tab != null && page != null) {
             key(tab.id) {
-                val bottom = if (address.editing) resting else maxOf(keyboard, resting)
+                // Find on Page's bar sits on the keyboard: the page ends above it.
+                val bottom = when {
+                    address.editing -> resting
+                    page.finding -> maxOf(keyboard + FindBarHeight, resting)
+                    else -> maxOf(keyboard, resting)
+                }
                 PageView(page, Modifier.windowInsetsPadding(above).padding(bottom = bottom))
             }
         } else {
@@ -175,7 +180,9 @@ private fun Wide(browser: Browser, page: WebPage?, sidebar: @Composable (Boolean
             val tab = browser.frontTab
             if (tab != null && page != null) {
                 Box {
-                    key(tab.id) { PageView(page) }
+                    // The page ends above Find on Page's bar, so a match at
+                    // its end is not under the bar.
+                    key(tab.id) { PageView(page, Modifier.padding(bottom = if (page.finding) FindBarHeight + 16.dp else 0.dp)) }
                     if (page.finding) {
                         FindBar(page, Modifier.align(Alignment.BottomCenter).widthIn(max = 560.dp).padding(12.dp))
                     }

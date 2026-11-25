@@ -500,6 +500,9 @@ private fun TextSize(page: WebPage) {
  * to the previous and the next one, and Done. In the narrow bar's place,
  * or over the bottom of the page on a wide screen.
  */
+/** How high Find on Page's bar is in the narrow bar's place: its row and the gap below. */
+val FindBarHeight = 56.dp
+
 @Composable
 fun FindBar(page: WebPage, modifier: Modifier = Modifier) {
     val field = remember { FocusRequester() }

@@ -175,8 +175,13 @@ class WebPage(
     }
 
     private fun readTopColor() = view.evaluateJavascript(TOP_COLOR) { result ->
-        val rgb = runCatching { JSONArray(result) }.getOrNull() ?: return@evaluateJavascript
-        topColor = Color(rgb.getInt(0), rgb.getInt(1), rgb.getInt(2))
+        // The page can change what the script reads: anything but three
+        // numbers is no colour, and never an error.
+        val color = runCatching {
+            val rgb = JSONArray(result)
+            Color(rgb.getInt(0).coerceIn(0, 255), rgb.getInt(1).coerceIn(0, 255), rgb.getInt(2).coerceIn(0, 255))
+        }.getOrNull() ?: return@evaluateJavascript
+        topColor = color
     }
 
     /** The page was loaded or changed: what the bars take from it. */
