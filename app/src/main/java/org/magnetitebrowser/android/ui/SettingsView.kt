@@ -2,6 +2,7 @@ package org.magnetitebrowser.android.ui
 
 import android.app.role.RoleManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -24,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -119,14 +121,25 @@ fun SettingsView(browser: Browser, onJoin: () -> Unit, onDone: () -> Unit) {
 
 /**
  * Whether links of other apps open here. The system keeps that choice: the
- * button asks it (Android 10 and later), or leads to its default apps.
+ * button asks it (Android 10 and later), or leads to its default apps. Read
+ * again whenever the screen comes back, as from the system's settings.
  */
 @Composable
 private fun DefaultBrowser() {
     val context = LocalContext.current
     val roles = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) context.getSystemService(RoleManager::class.java) else null
-    fun held() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && roles?.isRoleHeld(RoleManager.ROLE_BROWSER) == true
+    fun held(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && roles != null) return roles.isRoleHeld(RoleManager.ROLE_BROWSER)
+        // Before roles: whose app the system opens a web link with.
+        val link = Intent(Intent.ACTION_VIEW, "https://example.org/".toUri())
+        val handler = context.packageManager.resolveActivity(link, PackageManager.MATCH_DEFAULT_ONLY)
+        return handler?.activityInfo?.packageName == context.packageName
+    }
     var isDefault by remember { mutableStateOf(held()) }
+    LifecycleResumeEffect(Unit) {
+        isDefault = held()
+        onPauseOrDispose {}
+    }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { isDefault = held() }
 
     Title("Default Browser")
@@ -137,7 +150,10 @@ private fun DefaultBrowser() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && roles?.isRoleAvailable(RoleManager.ROLE_BROWSER) == true) {
                 ask.launch(roles.createRequestRoleIntent(RoleManager.ROLE_BROWSER))
             } else {
-                context.startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+                // A device without that screen gets the settings' start.
+                val apps = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+                runCatching { context.startActivity(apps) }
+                    .onFailure { runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS)) } }
             }
         }) { Text("Make Default Browser…") }
         Hint("Links from other apps then open here, as new tabs.")
