@@ -119,8 +119,6 @@ class WebPage(
     /** The size of the page's text, in percent. */
     var textSize by mutableIntStateOf(siteTextSize)
         private set
-    /** Room kept at the end of the page, in dp (see `keepClear`). */
-    private var room = 0f
 
     /** `view` in this page's profile; the profile must be set before anything else. */
     private fun <V : WebView> inProfile(view: V) = view.also {
@@ -176,28 +174,6 @@ class WebPage(
         finding = false
     }
 
-    /**
-     * Room for the bar floating over the page's bottom edge, `bottom` dp:
-     * the end of the page can be scrolled above it. The web view has no
-     * setting for that, so the room is padding at the end of the page's
-     * document (its root element's style, which the page can see).
-     */
-    fun keepClear(bottom: Float) {
-        if (bottom == room) return
-        room = bottom
-        makeRoom()
-    }
-
-    private fun makeRoom() {
-        val style = if (room > 0) {
-            // In CSS pixels: dp divided by how far the page is zoomed (a desktop page is zoomed out).
-            "setProperty('padding-bottom', $room / (window.visualViewport ? visualViewport.scale : 1) + 'px', 'important')"
-        } else {
-            "removeProperty('padding-bottom')"
-        }
-        view.evaluateJavascript("document.documentElement?.style.$style", null)
-    }
-
     private fun readTopColor() = view.evaluateJavascript(TOP_COLOR) { result ->
         val rgb = runCatching { JSONArray(result) }.getOrNull() ?: return@evaluateJavascript
         topColor = Color(rgb.getInt(0), rgb.getInt(1), rgb.getInt(2))
@@ -206,7 +182,6 @@ class WebPage(
     /** The page was loaded or changed: what the bars take from it. */
     private fun loaded() {
         readTopColor()
-        if (room > 0) makeRoom()
     }
 
     /** A finger is on the page. */

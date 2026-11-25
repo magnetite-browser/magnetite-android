@@ -60,7 +60,7 @@ private enum class Over { Nothing, Settings, Join }
 
 /**
  * On a narrow screen (a phone, a tablet window beside another app): the page
- * in front, from the status bar down, with the bar floating over its bottom,
+ * in front, from the status bar down to the bar below it,
  * and the sidebar as the start page and as a sheet. On a wide one (a tablet):
  * the sidebar beside the page, as on the desktop, with the bar above the page.
  */
@@ -127,17 +127,21 @@ private fun Narrow(browser: Browser, page: WebPage?, sidebar: @Composable (Boole
     // Where the keyboard is going: a field of the page or Find on Page has it, and
     // the page makes room for it once. The address is typed over the page.
     val keyboard = with(LocalDensity.current) { WindowInsets.imeAnimationTarget.getBottom(this).toDp() }
+    // The page ends above the bar as it rests: the web view has no way to
+    // let the end of a page scroll out from under it, short of changing the
+    // page's own style, which pages can see and which breaks some layouts.
+    val resting = PhoneBarHeight + navigation
 
     // What is above the page: its colour.
     Box(Modifier.fillMaxSize().background(page?.topColor ?: MaterialTheme.colorScheme.background)) {
         val tab = browser.frontTab
         if (tab != null && page != null) {
-            LaunchedEffect(page, navigation) { page.keepClear((PhoneBarHeight + navigation).value) }
             key(tab.id) {
-                PageView(page, Modifier.windowInsetsPadding(above).padding(bottom = if (address.editing) 0.dp else keyboard))
+                val bottom = if (address.editing) resting else maxOf(keyboard, resting)
+                PageView(page, Modifier.windowInsetsPadding(above).padding(bottom = bottom))
             }
         } else {
-            Box(Modifier.windowInsetsPadding(above).padding(bottom = PhoneBarHeight + navigation)) { sidebar(false) {} }
+            Box(Modifier.windowInsetsPadding(above).padding(bottom = resting)) { sidebar(false) {} }
         }
         // One bar for the page and the start page, outside what switches
         // between them: with a bar each, switching would lose what it holds
@@ -170,8 +174,6 @@ private fun Wide(browser: Browser, page: WebPage?, sidebar: @Composable (Boolean
             TopBar(browser, page, onSidebar = { columnShown = !columnShown })
             val tab = browser.frontTab
             if (tab != null && page != null) {
-                // No bar over the page here.
-                LaunchedEffect(page) { page.keepClear(0f) }
                 Box {
                     key(tab.id) { PageView(page) }
                     if (page.finding) {

@@ -117,7 +117,7 @@ val PhoneBarHeight = 64.dp
 private enum class PhoneBarLook { Full, Small, Find, Aside }
 
 /**
- * The bar of a narrow screen, floating over the bottom of the page: back,
+ * The bar of a narrow screen, below the page on a strip of its colour: back,
  * the address, the page's menu and the way to the sidebar (`onSidebar`).
  * While the reader scrolls down into a page it shrinks to the site's name,
  * and Find on Page's bar takes its place while finding. It sits on the
