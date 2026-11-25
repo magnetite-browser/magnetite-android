@@ -454,7 +454,7 @@ fun PageMenu(browser: Browser, page: WebPage, floating: Boolean) {
     )
 
     // In a chain: pinning the page in its tab's space, and making it a favorite there, unless it is already.
-    val space = browser.spaces.firstOrNull { it.id == tab?.space }?.takeIf { browser.sync.joined && Address.isWeb(page.url) }
+    val space = browser.spaces.firstOrNull { it.id == tab?.space }?.takeIf { browser.sync.joined && browser.sync.sidebar != null && Address.isWeb(page.url) }
     val canPin = space != null && space.pinned.none { (it.item as? RowItem.Page)?.page?.url == page.url }
     val canFavor = space != null && space.favorites.none { it.url == page.url }
 

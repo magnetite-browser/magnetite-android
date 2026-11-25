@@ -232,7 +232,7 @@ private fun SpaceSwitcher(browser: Browser, add: () -> Unit, modifier: Modifier)
                     SpaceIcon(space, 20.dp)
                 }
             }
-            if (browser.sync.joined) {
+            if (browser.sync.joined && browser.sync.sidebar != null) {
                 IconButton(onClick = add, Modifier.size(40.dp, 36.dp)) {
                     Icon(Icons.Default.Add, "New Space", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -254,8 +254,9 @@ private fun SpacePage(
     onJoin: () -> Unit,
     onClose: (() -> Unit)?,
 ) {
-    // Items can be changed: the sidebar is a chain's.
-    val editable = browser.sync.joined
+    // Items can be changed: the sidebar is a chain's, and one is here to
+    // change (not before the first is read).
+    val editable = browser.sync.joined && browser.sync.sidebar != null
     val renaming = rememberVectorPainter(Icons.Outlined.Edit)
     fun renameItem(id: String, title: String) = Edit("Rename…", renaming) { rename(id, title) }
     val unpinning = painterResource(R.drawable.ic_unpin)
@@ -264,8 +265,7 @@ private fun SpacePage(
     val list = @Composable {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 24.dp)) {
             item {
-                // The private space keeps its name, as on the desktop.
-                val edits = if (editable && !space.ephemeral) listOf(Edit("Rename Space…", renaming) { rename(space.id, space.title) }) else emptyList()
+                val edits = if (editable) listOf(Edit("Rename Space…", renaming) { rename(space.id, space.title) }) else emptyList()
                 Header(space, edits, onSettings, onClose)
             }
             if (!browser.sync.joined) item { Invitation(onJoin) }
