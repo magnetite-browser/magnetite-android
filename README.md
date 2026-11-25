@@ -28,7 +28,8 @@ scripts/core.sh              # builds the core into core/ (again after the core 
 ## Test
 
 The UI tests join a demo chain and open a page from it; one runs on a phone,
-the other on a tablet (a screen at least 720 dp wide). Start the demo server
+the other on a tablet (a screen at least 720 dp wide). Another hands the app
+web links, as other apps do. Start the demo server
 and an emulator or device, then:
 
 ```sh
@@ -69,6 +70,15 @@ Each profile of the chain is a profile of the web engine, so spaces keep
 their cookies and logins apart as on the desktop. That needs a web engine
 with profiles (`WebViewFeature.MULTI_PROFILE`); on an older one all spaces share one, and a private space is not
 private.
+
+## Default browser
+
+The app opens the web links other apps hand it (the `http` and `https`
+filter in `AndroidManifest.xml`), so Android offers it as the default
+browser. Settings → Default Browser asks the system to make it one (on
+Android 9 and older it leads to the system's default apps). A link opens as
+a new tab of the space in front, at launch or while the app runs; other
+links are left alone.
 
 ## Licence
 
