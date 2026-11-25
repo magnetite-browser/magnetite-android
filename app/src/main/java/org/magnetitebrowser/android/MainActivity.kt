@@ -26,6 +26,12 @@ class MainActivity : ComponentActivity(), WebPage.Host {
         filesChosen?.invoke(WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data))
         filesChosen = null
     }
+    /** Gets the permissions of the system's question that is open, if one is. */
+    private var permissionsGranted: ((Set<String>) -> Unit)? = null
+    private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        permissionsGranted?.invoke(result.filterValues { it }.keys)
+        permissionsGranted = null
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,6 +75,13 @@ class MainActivity : ComponentActivity(), WebPage.Host {
         filesChosen?.invoke(null)
         filesChosen = done
         this.picker.launch(picker)
+    }
+
+    override fun askPermissions(permissions: List<String>, done: (Set<String>) -> Unit) {
+        // A page that asks again while the system asks gets nothing for the first.
+        permissionsGranted?.invoke(emptySet())
+        permissionsGranted = done
+        this.permissions.launch(permissions.toTypedArray())
     }
 
     /** Keys of a hardware keyboard, as on the desktop. */

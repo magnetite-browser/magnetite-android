@@ -8,7 +8,6 @@ import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -60,16 +59,27 @@ class JoinAndBrowseTest {
         assertTrue(device.wait(Until.gone(By.text("MDN Web Docs")), 5_000))
         tap(By.text("Reading"))
 
+        // A space's icon below shows its page; swiping goes back to the one before.
         tap(By.res("space.space-work"))
         find(By.text("magnetite"))
-        assertFalse(has(By.text("Wikipedia")))
+        // Once the pages have stopped moving, the first space's is gone.
+        assertTrue(device.wait(Until.gone(By.text("Wikipedia")), 5_000))
         keep("2-work-space")
+        device.swipe(device.displayWidth / 5, device.displayHeight / 2, device.displayWidth * 4 / 5, device.displayHeight / 2, 10)
+        find(By.text("Wikipedia"))
 
-        tap(By.res("space.space-home"))
         tap(By.text("Example"))
         find(By.textContains("Learn more"), 30_000)
         assertTrue(has(By.text("example.org")))
         keep("3-page")
+
+        // Holding a link offers to open it behind the page in front.
+        find(By.textContains("Learn more")).longClick()
+        find(By.text("Open in Background"))
+        keep("3-link-menu")
+        tap(By.text("Open in Background"))
+        assertTrue(device.wait(Until.gone(By.text("Open in Background")), 5_000))
+        assertTrue(has(By.text("example.org")))
 
         // Find on Page takes the bar's place and counts the matches.
         tap(By.desc("More"))
@@ -78,17 +88,23 @@ class JoinAndBrowseTest {
         find(By.textStartsWith("1 of"))
         tap(By.desc("Done"))
 
-        // New Tab: the start page, typing an address. Picking a page ends the typing.
+        // New Tab: the start page, typing an address. A word offers the
+        // chain's page that matches; picking it opens it and ends the typing.
         tap(By.desc("More"))
         tap(By.text("New Tab"))
-        find(By.res("address").focused(true))
-        tap(By.text("Example Domain"))
-        find(By.text("example.org"))
+        find(By.res("address").focused(true)).text = "rust"
+        find(By.text("rust-lang.org · Home"))
+        keep("4-suggestions")
+        tap(By.text("rust-lang.org · Home"))
+        assertTrue(device.wait(Until.gone(By.text("PINNED")), 5_000))
+        find(By.text("rust-lang.org"), 30_000)
 
-        // The tab is listed as open here, in the space it was opened from.
+        // The tabs are listed as open here, in the space they were opened
+        // from, the one opened behind too.
         tap(By.desc("Tabs"))
         find(By.text("OPEN HERE"))
-        keep("4-sidebar-over-page")
+        assertTrue(has(By.text("iana.org")))
+        keep("5-sidebar-over-page")
 
         // The chain learns of the tab, a desktop takes it over, and at the
         // next sync it is closed here: the app is back on its start page.
@@ -100,7 +116,7 @@ class JoinAndBrowseTest {
         Thread.sleep(2_000)
         tap(By.desc("Done"))
         find(By.textStartsWith("No tabs open in this space."))
-        keep("5-taken-over")
+        keep("6-taken-over")
 
         // A site whose page was loaded here shows its icon from then on.
         tap(By.text("Wikipedia"))
@@ -108,7 +124,7 @@ class JoinAndBrowseTest {
         Thread.sleep(6_000)
         tap(By.desc("Tabs"))
         find(By.text("OPEN HERE"))
-        keep("6-site-icon")
+        keep("7-site-icon")
     }
 
     /** On a tablet the sidebar stays beside the page. */
@@ -118,16 +134,24 @@ class JoinAndBrowseTest {
         join()
         keep("tablet-1-no-tab")
 
+        // What a word typed could mean shows below the field.
+        find(By.res("address")).click()
+        find(By.res("address").focused(true)).text = "rust"
+        find(By.text("rust-lang.org · Home"))
+        keep("tablet-2-suggestions")
+
+        // Picking a page from the sidebar ends the typing.
         tap(By.text("Example"))
         find(By.textContains("Learn more"), 30_000)
+        assertTrue(device.wait(Until.gone(By.text("rust-lang.org · Home")), 5_000))
         // The page is open and the sidebar still there, listing it.
         assertTrue(has(By.text("Wikipedia")))
         assertTrue(has(By.text("OPEN HERE")))
-        keep("tablet-2-page")
+        keep("tablet-3-page")
 
         tap(By.desc("Sidebar"))
         assertTrue(device.wait(Until.gone(By.text("Wikipedia")), 5_000))
-        keep("tablet-3-sidebar-hidden")
+        keep("tablet-4-sidebar-hidden")
     }
 
     private fun join() {

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- The core's generated bindings (core/kotlin, from scripts/core.sh)
+         use java.lang.ref.Cleaner only where the system has it (API 33),
+         checked at run time, and JNA's cleaner before. -->
+    <issue id="NewApi">
+        <ignore regexp=".*/core/kotlin/uniffi/.*" />
+    </issue>
+</lint>

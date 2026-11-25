@@ -1,14 +1,19 @@
 package org.magnetitebrowser.android.web
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.os.Message
 import android.os.SystemClock
 import android.view.MotionEvent
+import android.webkit.GeolocationPermissions
+import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -22,6 +27,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.core.net.toUri
 import androidx.webkit.WebViewCompat
 import org.json.JSONArray
 import org.magnetitebrowser.android.model.Favicons
@@ -44,6 +50,8 @@ class WebPage(
     interface Host {
         /** Let the user pick files with `picker`; `done` gets them, or null. */
         fun chooseFiles(picker: Intent, done: (Array<Uri>?) -> Unit)
+        /** Ask the system for Android `permissions`; `done` gets those the app has. */
+        fun askPermissions(permissions: List<String>, done: (Set<String>) -> Unit)
     }
 
     var url by mutableStateOf(url)
@@ -89,6 +97,36 @@ class WebPage(
     /** The match shown (from 1; 0 when there is none) and how many there are. */
     data class Matches(val current: Int, val count: Int)
 
+    /** A link held down, at `x`, `y` in the view's pixels: its menu shows there. */
+    var heldLink by mutableStateOf<HeldLink?>(null)
+
+    data class HeldLink(val url: String, val x: Int, val y: Int)
+
+    /** The site asks for the camera, the microphone or the location, and waits for the reader. */
+    var asking by mutableStateOf<Ask?>(null)
+        private set
+
+    /**
+     * What `site` asks to do (`what`: "use your camera"…); `answer` takes the
+     * reader's choice, once: a request may be answered only once. Android
+     * asks once more for the app itself. `request` is what the page asked
+     * with, so that only its own cancelling ends the question.
+     */
+    class Ask(val site: String, val what: String, val request: Any, private val onAnswer: (Boolean) -> Unit) {
+        private var done = false
+
+        fun answer(allowed: Boolean) {
+            if (done) return
+            done = true
+            onAnswer(allowed)
+        }
+
+        /** The page took the request back: it gets no answer. */
+        fun cancel() {
+            done = true
+        }
+    }
+
     /** Called when the address or title changed. */
     var changed: ((url: String, title: String) -> Unit)? = null
     /** Called when the page wants `url` in a new tab. */
@@ -109,6 +147,7 @@ class WebPage(
         webViewClient = Navigation()
         webChromeClient = Chrome()
         setFindListener { current, count, _ -> matches = Matches(if (count > 0) current + 1 else 0, count) }
+        setOnLongClickListener { held() }
         loadUrl(url)
     }
     private val mobileAgent = view.settings.userAgentString
@@ -189,6 +228,29 @@ class WebPage(
         readTopColor()
     }
 
+    /**
+     * A long press: on a web link, its menu (`heldLink`) in place of the
+     * engine's text selection. Elsewhere the engine handles it.
+     */
+    private fun held(): Boolean {
+        val hit = view.hitTestResult
+        fun hold(url: String?) {
+            if (url != null && url.toUri().scheme?.lowercase() in setOf("http", "https")) heldLink = HeldLink(url, pressedX, pressedY)
+        }
+        when (hit.type) {
+            WebView.HitTestResult.SRC_ANCHOR_TYPE -> hold(hit.extra)
+            // The hit names the image; the engine tells the link's address.
+            WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE ->
+                view.requestFocusNodeHref(Handler(Looper.getMainLooper()) { hold(it.data.getString("url")); true }.obtainMessage())
+            else -> return false
+        }
+        return true
+    }
+
+    /** Where the last finger went down, in the view's pixels. */
+    private var pressedX = 0
+    private var pressedY = 0
+
     /** A finger is on the page. */
     private var touching = false
     /** When the reader's own scrolling last moved the page. */
@@ -216,7 +278,11 @@ class WebPage(
     private inner class Viewer : WebView(activity) {
         override fun dispatchTouchEvent(event: MotionEvent): Boolean {
             when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> touching = true
+                MotionEvent.ACTION_DOWN -> {
+                    touching = true
+                    pressedX = event.x.toInt()
+                    pressedY = event.y.toInt()
+                }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> touching = false
             }
             return super.dispatchTouchEvent(event)
@@ -323,6 +389,60 @@ class WebPage(
             host.chooseFiles(params.createIntent()) { callback.onReceiveValue(it) }
             return true
         }
+
+        /** The camera or the microphone, for a call for example; nothing else a page may ask for. */
+        override fun onPermissionRequest(request: PermissionRequest) {
+            val wanted = mapOf(
+                PermissionRequest.RESOURCE_VIDEO_CAPTURE to Manifest.permission.CAMERA,
+                PermissionRequest.RESOURCE_AUDIO_CAPTURE to Manifest.permission.RECORD_AUDIO,
+            ).filterKeys { it in request.resources }
+            if (wanted.isEmpty()) return request.deny()
+            val what = when (wanted.size) {
+                2 -> "use your camera and microphone"
+                else -> if (PermissionRequest.RESOURCE_VIDEO_CAPTURE in wanted) "use your camera" else "use your microphone"
+            }
+            ask(request.origin.host ?: request.origin.toString(), what, request, wanted.values.toList()) { granted ->
+                val allowed = wanted.filterValues { it in granted }.keys
+                if (allowed.isEmpty()) request.deny() else request.grant(allowed.toTypedArray())
+            }
+        }
+
+        override fun onPermissionRequestCanceled(request: PermissionRequest) {
+            asking?.takeIf { it.request === request }?.let {
+                it.cancel()
+                asking = null
+            }
+        }
+
+        /** The location, for a map for example. Asked again at the next request. */
+        override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
+            val location = listOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
+            ask(origin.toUri().host ?: origin, "know where you are", callback, location) { granted ->
+                callback.invoke(origin, granted.isNotEmpty(), false)
+            }
+        }
+
+        override fun onGeolocationPermissionsHidePrompt() {
+            asking?.takeIf { it.request is GeolocationPermissions.Callback }?.let {
+                it.cancel()
+                asking = null
+            }
+        }
+    }
+
+    /**
+     * Ask the reader whether `site` may `what`, then the system for the app's
+     * `permissions`; `done` gets those granted, none for a no. A question
+     * still open is answered no.
+     */
+    private fun ask(site: String, what: String, request: Any, permissions: List<String>, done: (Set<String>) -> Unit) {
+        asking?.answer(false)
+        lateinit var mine: Ask
+        mine = Ask(site, what, request) { allowed ->
+            if (asking === mine) asking = null
+            if (allowed) host.askPermissions(permissions, done) else done(emptySet())
+        }
+        asking = mine
     }
 }
 

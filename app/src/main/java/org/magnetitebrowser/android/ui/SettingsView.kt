@@ -31,7 +31,7 @@ import org.magnetitebrowser.android.model.Browser
 fun SettingsView(browser: Browser, onJoin: () -> Unit, onDone: () -> Unit) {
     val sync = browser.sync
     var search by remember {
-        mutableStateOf(sync.prefs.getString(Browser.SEARCH, null) ?: Address.engines[0].second)
+        mutableStateOf(browser.searchTemplate)
     }
     var leaving by remember { mutableStateOf(false) }
     var clearing by remember { mutableStateOf(false) }

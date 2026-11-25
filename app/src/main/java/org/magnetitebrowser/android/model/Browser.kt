@@ -127,24 +127,36 @@ class Browser(
 
     // Tabs
 
-    /** Open `url` in a new tab of the space in front and show it. */
-    fun open(url: String, origin: String? = null) {
-        val tab = Tab(space = space.id, url = url, origin = origin)
+    /**
+     * Open `url` in a new tab of the space in front and show it; with
+     * `inBackground`, behind the tab in front.
+     */
+    fun open(url: String, origin: String? = null, inBackground: Boolean = false, space: String = this.space.id) {
+        val tab = Tab(space = space, url = url, origin = origin)
         tabs = listOf(tab) + tabs
-        front = tab.id
+        if (!inBackground) {
+            front = tab.id
+            spaceId = tab.space
+        }
         save()
     }
 
-    /** Show the tab of sidebar item `page`, opening one if there is none. */
-    fun open(page: Page) {
-        val tab = tabs.firstOrNull { it.origin == page.id && it.space == space.id }
-        if (tab != null) show(tab) else open(page.url, page.id)
+    /** Show the tab of sidebar item `page` in `space`, opening one if there is none. */
+    fun open(page: Page, space: String = this.space.id) {
+        val tab = tabs.firstOrNull { it.origin == page.id && it.space == space }
+        if (tab != null) show(tab) else open(page.url, page.id, space = space)
     }
+
+    /** The search engine Settings chose, as a template (`Address.engines`). */
+    val searchTemplate: String get() = sync.prefs.getString(SEARCH, null) ?: Address.engines[0].second
 
     /** Go to what the address field holds: in the tab in front, else a new one. */
     fun go(text: String) {
-        val template = sync.prefs.getString(SEARCH, null) ?: Address.engines[0].second
-        val url = Address.url(text, template) ?: return
+        Address.url(text, searchTemplate)?.let(::load)
+    }
+
+    /** Load `url` in the tab in front, else in a new one. */
+    fun load(url: String) {
         val tab = frontTab
         if (tab != null) page(tab).view.loadUrl(url) else open(url)
     }
@@ -181,6 +193,13 @@ class Browser(
     fun closeAll(space: Space) = tabs(space).forEach(::close)
 
     // Other devices
+
+    /** Hand `url` to the desktop without opening it here. */
+    fun sendToDesktop(url: String, space: String = this.space.id) {
+        sent = listOf(Tab(space = space, url = url)) + sent
+        save()
+        scope.launch { shareTabs() }
+    }
 
     /**
      * Hand `tab` to the desktop: it closes here and waits in `sent` until a
@@ -339,7 +358,7 @@ class Browser(
         private const val PRIVATE = "private-"
 
         /** The space of a device that is in no chain. */
-        val HOME = Space("home", "Home", null, null, "home", false, emptyList(), emptyList(), emptyList())
+        val HOME = Space("home", "Home", "home", null, "home", false, emptyList(), emptyList(), emptyList(), false)
 
         private fun JSONArray.tabs() = (0 until length()).map { Tab.of(getJSONObject(it)) }
     }

@@ -1,17 +1,22 @@
 package org.magnetitebrowser.android.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import uniffi.magnetite_mobile_core.Space
 
 /** Magnetite's own colour, where a space has none. */
 private val Accent = Color(0xFFE2622B)
 
-/** The app's look, light or dark as the system is, with `tint` for buttons and marks. */
+/**
+ * The app's look, light or dark as the system is, with `tint` for buttons and
+ * marks. Text and icons outside a surface take the ground's text colour.
+ */
 @Composable
 fun MagnetiteTheme(tint: Color?, content: @Composable () -> Unit) {
     val accent = tint ?: Accent
@@ -32,7 +37,9 @@ fun MagnetiteTheme(tint: Color?, content: @Composable () -> Unit) {
             secondaryContainer = accent.copy(alpha = 0.18f), onSecondaryContainer = Color(0xFF1B1B1F),
         )
     }
-    MaterialTheme(colorScheme = colors, content = content)
+    MaterialTheme(colorScheme = colors) {
+        CompositionLocalProvider(LocalContentColor provides colors.onBackground, content = content)
+    }
 }
 
 /** Whether text on this colour reads better light; the iOS app's measure. */
@@ -40,9 +47,3 @@ val Color.isDark get() = 0.299f * red + 0.587f * green + 0.114f * blue < 0.5f
 
 /** The space's colour; none: the app's own. */
 val Space.tint: Color? get() = accent?.let { Color(it.red, it.green, it.blue) }
-
-/**
- * The icon when it is an emoji. The desktop's named icons are not drawn
- * here.
- */
-val Space.emoji: String? get() = icon?.takeIf { text -> text.codePoints().anyMatch { it > 0x238C } }

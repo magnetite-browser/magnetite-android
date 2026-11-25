@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
@@ -25,12 +27,20 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -44,14 +54,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
+import org.magnetitebrowser.android.R
 import org.magnetitebrowser.android.model.Browser
 import org.magnetitebrowser.android.web.WebPage
 
@@ -79,11 +96,12 @@ fun RootView(browser: Browser) {
             .background(MaterialTheme.colorScheme.background)
             .semantics { testTagsAsResourceId = true },
     ) {
-        val sidebar: @Composable (Boolean, () -> Unit) -> Unit = { inSheet, leave ->
+        val sidebar: Sidebar = { insets, close ->
             SidebarView(
-                browser, inSheet,
-                onSettings = { leave(); over = Over.Settings },
-                onJoin = { leave(); over = Over.Join },
+                browser,
+                onSettings = { close?.invoke(); over = Over.Settings },
+                onJoin = { close?.invoke(); over = Over.Join },
+                onClose = close, insets = insets,
             )
         }
         val wide = maxWidth >= 720.dp
@@ -102,6 +120,12 @@ fun RootView(browser: Browser) {
     }
 }
 
+/**
+ * The sidebar as a start page or column (no `close`), or as a sheet that
+ * `close` closes; it keeps clear of `insets`.
+ */
+private typealias Sidebar = @Composable (insets: WindowInsets, close: (() -> Unit)?) -> Unit
+
 /** Status and navigation bar icons that read on `ground`: light on a dark colour, dark on a light one. */
 @Composable
 private fun SystemBarIcons(ground: Color) {
@@ -118,7 +142,7 @@ private fun SystemBarIcons(ground: Color) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun Narrow(browser: Browser, page: WebPage?, sidebar: @Composable (Boolean, () -> Unit) -> Unit) {
+private fun Narrow(browser: Browser, page: WebPage?, sidebar: Sidebar) {
     var sheetShown by remember { mutableStateOf(false) }
     LaunchedEffect(browser.front) { sheetShown = false }
     val address = rememberAddressState(browser)
@@ -144,10 +168,11 @@ private fun Narrow(browser: Browser, page: WebPage?, sidebar: @Composable (Boole
                     address.editing -> resting
                     else -> maxOf(keyboard, resting)
                 }
-                PageView(page, Modifier.windowInsetsPadding(above).padding(bottom = bottom))
+                PageView(browser, page, Modifier.windowInsetsPadding(above).padding(bottom = bottom))
             }
         } else {
-            Box(Modifier.windowInsetsPadding(above).padding(bottom = resting)) { sidebar(false) {} }
+            // Its colour reaches under the status bar.
+            Box(Modifier.padding(bottom = resting)) { sidebar(above, null) }
         }
         // One bar for the page and the start page, outside what switches
         // between them: with a bar each, switching would lose what it holds
@@ -160,47 +185,58 @@ private fun Narrow(browser: Browser, page: WebPage?, sidebar: @Composable (Boole
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = MaterialTheme.colorScheme.background,
         ) {
-            sidebar(true) { sheetShown = false }
+            sidebar(WindowInsets(0)) { sheetShown = false }
         }
     }
 }
 
 @Composable
-private fun Wide(browser: Browser, page: WebPage?, sidebar: @Composable (Boolean, () -> Unit) -> Unit) {
+private fun Wide(browser: Browser, page: WebPage?, sidebar: Sidebar) {
     var columnShown by remember { mutableStateOf(true) }
+    val address = rememberAddressState(browser)
 
     Row(Modifier.fillMaxSize().safeDrawingPadding()) {
         AnimatedVisibility(columnShown) {
             Row {
-                Box(Modifier.width(320.dp).fillMaxHeight()) { sidebar(false) {} }
+                Box(Modifier.width(320.dp).fillMaxHeight()) { sidebar(WindowInsets(0), null) }
                 VerticalDivider()
             }
         }
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            TopBar(browser, page, onSidebar = { columnShown = !columnShown })
-            val tab = browser.frontTab
-            if (tab != null && page != null) {
-                Box {
+            TopBar(browser, page, address, onSidebar = { columnShown = !columnShown })
+            Box(Modifier.weight(1f)) {
+                val tab = browser.frontTab
+                if (tab != null && page != null) {
                     // The page ends above Find on Page's bar, so a match at
                     // its end is not under the bar.
-                    key(tab.id) { PageView(page, Modifier.padding(bottom = if (page.finding) FindBarHeight + 16.dp else 0.dp)) }
+                    key(tab.id) {
+                        PageView(browser, page, Modifier.padding(bottom = if (page.finding) FindBarHeight + 16.dp else 0.dp))
+                    }
                     if (page.finding) {
                         FindBar(page, Modifier.align(Alignment.BottomCenter).widthIn(max = 560.dp).padding(12.dp))
                     }
+                } else {
+                    Notice("No Tab Open", "Pick a page from the sidebar, or type an address above.")
                 }
-            } else {
-                Notice("No Tab Open", "Pick a page from the sidebar, or type an address above.")
+                // While typing: what the text could mean, over the page below the field.
+                if (address.editing) {
+                    SuggestionList(
+                        browser, address.text.text, address::finish,
+                        Modifier.align(Alignment.TopCenter).padding(8.dp).widthIn(max = 560.dp).heightIn(max = 420.dp),
+                    )
+                }
             }
         }
     }
 }
 
 /**
- * A page, and what is shown when it cannot be loaded. How far it loaded
- * shows in the address field.
+ * A page, and what is shown when it cannot be loaded; the menu of a link
+ * held down, and a site's question for the camera, microphone or location.
+ * How far it loaded shows in the address field.
  */
 @Composable
-private fun PageView(page: WebPage, modifier: Modifier = Modifier) {
+private fun PageView(browser: Browser, page: WebPage, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -214,7 +250,70 @@ private fun PageView(page: WebPage, modifier: Modifier = Modifier) {
                 }
             }
         }
+        page.heldLink?.let { LinkMenu(browser, it) { page.heldLink = null } }
+        page.asking?.let { AskDialog(it) }
     }
+}
+
+/**
+ * What holding a link offers, where the finger is: open it in a new tab,
+ * behind the one in front, or on the desktop (in a chain); copy or share it.
+ * The page's web view has no menu of its own for links.
+ */
+@Composable
+private fun LinkMenu(browser: Browser, link: WebPage.HeldLink, close: () -> Unit) {
+    val context = LocalContext.current
+    // The page shown is the tab in front's: its links go to its space, not
+    // to the one the sidebar shows (a private page's links stay private).
+    val space = browser.frontTab?.space ?: browser.space.id
+    val private = browser.spaces.firstOrNull { it.id == space }?.ephemeral == true
+    @Composable
+    fun entry(label: String, icon: Painter, action: () -> Unit) = DropdownMenuItem(
+        text = { Text(label) },
+        leadingIcon = { Icon(icon, null) },
+        onClick = {
+            close()
+            action()
+        },
+    )
+
+    Box(Modifier.offset { IntOffset(link.x, link.y) }) {
+        DropdownMenu(expanded = true, onDismissRequest = close) {
+            // Where the link goes, as the page may not say.
+            Text(
+                link.url, Modifier.widthIn(max = 280.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+            HorizontalDivider()
+            entry("Open in New Tab", painterResource(R.drawable.ic_open_new_tab)) { browser.open(link.url, space = space) }
+            entry("Open in Background", painterResource(R.drawable.ic_open_background)) {
+                browser.open(link.url, inBackground = true, space = space)
+            }
+            // Tabs of private spaces are never listed for the other devices.
+            if (browser.sync.joined && !private) {
+                entry("Send to Desktop", painterResource(R.drawable.ic_desktop)) { browser.sendToDesktop(link.url, space) }
+            }
+            HorizontalDivider()
+            entry("Copy Link", painterResource(R.drawable.ic_link)) { copy(context, link.url) }
+            entry("Share", rememberVectorPainter(Icons.Default.Share)) { share(context, link.url) }
+        }
+    }
+}
+
+/**
+ * A site asks for the camera, the microphone or the location. The question
+ * names the site, so a page cannot pass for the app.
+ */
+@Composable
+private fun AskDialog(ask: WebPage.Ask) {
+    AlertDialog(
+        onDismissRequest = { ask.answer(false) },
+        title = { Text("Allow ${ask.site} to ${ask.what}?") },
+        text = { Text("Magnetite keeps and sends nothing of it.") },
+        confirmButton = { TextButton(onClick = { ask.answer(true) }) { Text("Allow") } },
+        dismissButton = { TextButton(onClick = { ask.answer(false) }) { Text("Don’t Allow") } },
+    )
 }
 
 /** A title and a line in the middle of an empty place. */

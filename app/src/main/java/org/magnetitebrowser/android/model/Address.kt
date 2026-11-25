@@ -18,11 +18,11 @@ object Address {
         "Google" to "https://www.google.com/search?q=%s",
     )
 
-    /**
-     * The page for `text`: the address when it is one (`example.org`,
-     * `localhost:3000`, `https://…`), else a search for it with `template`.
-     */
-    fun url(text: String, template: String): String? {
+    /** The page for `text`: the address when it is one, else a search for it with `template`. */
+    fun url(text: String, template: String): String? = address(text) ?: search(text, template)
+
+    /** `text` as an address, when it is one: `example.org`, `localhost:3000`, `https://…`. */
+    fun address(text: String): String? {
         val text = text.trim()
         if (text.isEmpty()) return null
         if (isWeb(text)) return text
@@ -32,8 +32,17 @@ object Address {
             if (host == "localhost") return "http://$text"
             if ("." in host) return "https://$text"
         }
-        return template.replace("%s", Uri.encode(text))
+        return null
     }
+
+    /** A search for `text` with the engine of `template`. */
+    fun search(text: String, template: String): String? {
+        val text = text.trim()
+        return if (text.isEmpty()) null else template.replace("%s", Uri.encode(text))
+    }
+
+    /** The name of the engine of `template`. */
+    fun engine(template: String): String = (engines.firstOrNull { it.second == template } ?: engines[0]).first
 
     /** Is `url` a page of the web, with a host? */
     fun isWeb(url: String): Boolean {

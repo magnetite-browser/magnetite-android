@@ -16,6 +16,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.widthIn
@@ -81,6 +83,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -121,8 +124,8 @@ private enum class PhoneBarLook { Full, Small, Find, Aside }
  * the address, the page's menu and the way to the sidebar (`onSidebar`).
  * While the reader scrolls down into a page it shrinks to the site's name,
  * and Find on Page's bar takes its place while finding. It sits on the
- * keyboard while the address is typed, and steps aside while a field of
- * the page has the keyboard.
+ * keyboard while the address is typed, with what the text could mean just
+ * above it, and steps aside while a field of the page has the keyboard.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -136,14 +139,30 @@ fun PhoneBar(browser: Browser, page: WebPage?, address: AddressState, onSidebar:
         page?.reading == true -> PhoneBarLook.Small
         else -> PhoneBarLook.Full
     }
-    AnimatedContent(
-        look,
+    Column(
         modifier
             .windowInsetsPadding(
                 WindowInsets.ime.union(WindowInsets.navigationBars).union(WindowInsets.displayCutout)
                     .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
             )
-            .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+            // The suggestions end below the status bar.
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+            .padding(start = 12.dp, end = 12.dp, bottom = 8.dp, top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (address.editing) {
+            SuggestionList(browser, address.text.text, address::finish, Modifier.weight(1f, fill = false).fillMaxWidth())
+        }
+        Bar(browser, page, address, look, onSidebar)
+    }
+}
+
+/** The narrow bar's row in its `look`, changing from one to the next. */
+@Composable
+private fun Bar(browser: Browser, page: WebPage?, address: AddressState, look: PhoneBarLook, onSidebar: () -> Unit) {
+    AnimatedContent(
+        look,
         transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.9f)) togetherWith fadeOut() },
         contentAlignment = Alignment.BottomCenter,
         label = "bar",
@@ -214,11 +233,14 @@ private fun TabsButton(browser: Browser, onClick: () -> Unit) {
     }
 }
 
-/** A piece of the narrow bar: a tonal surface with a soft shadow, so that it stands out over any page. */
+/**
+ * A piece of the narrow bar, or something floating with it: a tonal surface
+ * with a soft shadow, so that it stands out over any page.
+ */
 @Composable
-private fun Floating(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun Floating(modifier: Modifier = Modifier, shape: Shape = CircleShape, content: @Composable () -> Unit) {
     Surface(
-        modifier, shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier, shape = shape, color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = 3.dp, border = BorderStroke(Dp.Hairline, MaterialTheme.colorScheme.outlineVariant),
         content = content,
     )
@@ -228,11 +250,11 @@ private fun Floating(modifier: Modifier = Modifier, content: @Composable () -> U
 
 /**
  * The bar above the page on a wide screen (a tablet), beside the sidebar
- * column, which its first button shows and hides (`onSidebar`).
+ * column, which its first button shows and hides (`onSidebar`). What the
+ * typed text could mean shows below it, over the page (`RootView`).
  */
 @Composable
-fun TopBar(browser: Browser, page: WebPage?, onSidebar: () -> Unit) {
-    val address = rememberAddressState(browser)
+fun TopBar(browser: Browser, page: WebPage?, address: AddressState, onSidebar: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -279,6 +301,12 @@ class AddressState {
     }
 
     fun stop() {
+        editing = false
+    }
+
+    /** Typing ended with a page gone to: the text goes too. */
+    fun finish() {
+        text = TextFieldValue()
         editing = false
     }
 }
@@ -351,8 +379,7 @@ fun AddressField(browser: Browser, page: WebPage?, address: AddressState, modifi
                     ),
                     keyboardActions = KeyboardActions(onGo = {
                         browser.go(address.text.text)
-                        address.text = TextFieldValue()
-                        address.stop()
+                        address.finish()
                     }),
                 )
                 if (!typing && page != null) {
@@ -449,14 +476,8 @@ fun PageMenu(browser: Browser, page: WebPage, floating: Boolean) {
             )
         },
         {
-            entry("Share", rememberVectorPainter(Icons.Default.Share)) {
-                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, page.url)
-                context.startActivity(Intent.createChooser(send, null))
-            }
-            entry("Copy Link", painterResource(R.drawable.ic_link)) {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("Link", page.url))
-            }
+            entry("Share", rememberVectorPainter(Icons.Default.Share)) { share(context, page.url) }
+            entry("Copy Link", painterResource(R.drawable.ic_link)) { copy(context, page.url) }
             if (tab != null && browser.sync.joined) {
                 entry("Send to Desktop", painterResource(R.drawable.ic_desktop)) { browser.sendToDesktop(tab) }
             }
@@ -477,6 +498,17 @@ fun PageMenu(browser: Browser, page: WebPage, floating: Boolean) {
             }
         }
     }
+}
+
+/** Hand `url` to an app the reader picks. */
+fun share(context: Context, url: String) {
+    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url)
+    context.startActivity(Intent.createChooser(send, null))
+}
+
+fun copy(context: Context, url: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText("Link", url))
 }
 
 /** Smaller and larger text, and the size now, which a tap resets. */
