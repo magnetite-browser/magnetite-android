@@ -1,5 +1,12 @@
 package org.magnetitebrowser.android.ui
 
+import android.app.role.RoleManager
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import android.text.format.DateUtils
@@ -18,9 +25,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.magnetitebrowser.android.BuildConfig
@@ -48,6 +57,8 @@ fun SettingsView(browser: Browser, onJoin: () -> Unit, onDone: () -> Unit) {
                 Text(label)
             }
         }
+
+        DefaultBrowser()
 
         Title("Sync")
         val server = sync.server
@@ -105,6 +116,47 @@ fun SettingsView(browser: Browser, onJoin: () -> Unit, onDone: () -> Unit) {
             "Clear website data of every space?", "You are signed out of the sites you use here.",
             "Clear", onConfirm = browser::clearWebsiteData, onClose = { clearing = false },
         )
+    }
+}
+
+/**
+ * Whether links of other apps open here. The system keeps that choice: the
+ * button asks it (Android 10 and later), or leads to its default apps. Read
+ * again whenever the screen comes back, as from the system's settings.
+ */
+@Composable
+private fun DefaultBrowser() {
+    val context = LocalContext.current
+    val roles = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) context.getSystemService(RoleManager::class.java) else null
+    fun held(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && roles != null) return roles.isRoleHeld(RoleManager.ROLE_BROWSER)
+        // Before roles: whose app the system opens a web link with.
+        val link = Intent(Intent.ACTION_VIEW, "https://example.org/".toUri())
+        val handler = context.packageManager.resolveActivity(link, PackageManager.MATCH_DEFAULT_ONLY)
+        return handler?.activityInfo?.packageName == context.packageName
+    }
+    var isDefault by remember { mutableStateOf(held()) }
+    LifecycleResumeEffect(Unit) {
+        isDefault = held()
+        onPauseOrDispose {}
+    }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { isDefault = held() }
+
+    Title("Default Browser")
+    if (isDefault) {
+        Hint("Magnetite is your default browser: links from other apps open here, as new tabs.")
+    } else {
+        OutlinedButton(onClick = {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && roles?.isRoleAvailable(RoleManager.ROLE_BROWSER) == true) {
+                ask.launch(roles.createRequestRoleIntent(RoleManager.ROLE_BROWSER))
+            } else {
+                // A device without that screen gets the settings' start.
+                val apps = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+                runCatching { context.startActivity(apps) }
+                    .onFailure { runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS)) } }
+            }
+        }) { Text("Make Default Browser…") }
+        Hint("Links from other apps then open here, as new tabs.")
     }
 }
 

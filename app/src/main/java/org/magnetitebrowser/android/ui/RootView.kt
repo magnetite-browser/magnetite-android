@@ -87,6 +87,10 @@ fun RootView(browser: Browser) {
     var over by remember { mutableStateOf(Over.Nothing) }
     val page = browser.frontTab?.let(browser::page)
 
+    // A tab coming to the front (a link from another app) shows over Settings.
+    LaunchedEffect(browser.front) {
+        if (browser.front != null) over = Over.Nothing
+    }
     BackHandler(enabled = browser.frontTab != null) {
         if (page != null && page.canGoBack) page.view.goBack() else browser.showSidebar()
     }
