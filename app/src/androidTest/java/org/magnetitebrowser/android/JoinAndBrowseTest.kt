@@ -8,7 +8,6 @@ import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -63,7 +62,8 @@ class JoinAndBrowseTest {
         // A space's icon below shows its page; swiping goes back to the one before.
         tap(By.res("space.space-work"))
         find(By.text("magnetite"))
-        assertFalse(has(By.text("Wikipedia")))
+        // Once the pages have stopped moving, the first space's is gone.
+        assertTrue(device.wait(Until.gone(By.text("Wikipedia")), 5_000))
         keep("2-work-space")
         device.swipe(device.displayWidth / 5, device.displayHeight / 2, device.displayWidth * 4 / 5, device.displayHeight / 2, 10)
         find(By.text("Wikipedia"))
