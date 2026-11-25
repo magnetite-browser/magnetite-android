@@ -2,10 +2,12 @@
 
 The phone and tablet app of [Magnetite](https://github.com/magnetite-browser/magnetite).
 It browses with the system's web engine (Android System WebView) and shows
-the spaces, favorites and pinned tabs of a sync chain. It never changes the
+the spaces, favorites and pinned tabs of a sync chain. It never writes the
 chain's sidebar. What it writes is its own entry among the chain's devices:
 the tabs open on it, which another device can take over ("Send to Desktop"
-asks for that).
+asks for that), and its changes to the sidebar (pin, add a favorite or a
+space, rename, remove), which a desktop of the chain makes. Until then they
+show marked "Waiting for your computer".
 
 ## Build
 
@@ -36,13 +38,16 @@ scripts/test.sh              # erases the app's data on the device first
 
 With the demo server on another port (`DEMO_PORT=8790 cargo run --example
 demo_server`), run `DEMO_PORT=8790 scripts/test.sh`: the device's port 8787
-then leads to it.
+then leads to it. The phone test changes the demo chain's sidebar (it pins a
+page and renames a favorite), so start the demo server again before the
+next run.
 
 The pictures the tests take land in `build/shots`. To try the app by hand,
 run `adb reverse tcp:8787 tcp:8787` and join `http://localhost:8787` ("Your
 own server") with the words the demo server prints.
 `curl -X POST localhost:8787/demo/take` plays a desktop that takes over the
-tabs the device lists.
+tabs the device lists, `…/demo/apply` one that makes the changes to the
+sidebar the device asked for (pin, favorite, new space, rename, remove).
 
 ## Layout
 

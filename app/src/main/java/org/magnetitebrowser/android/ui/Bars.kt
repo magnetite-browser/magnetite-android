@@ -111,6 +111,7 @@ import org.magnetitebrowser.android.R
 import org.magnetitebrowser.android.model.Address
 import org.magnetitebrowser.android.model.Browser
 import org.magnetitebrowser.android.web.WebPage
+import uniffi.magnetite_mobile_core.RowItem
 
 // Narrow screens
 
@@ -452,8 +453,13 @@ fun PageMenu(browser: Browser, page: WebPage, floating: Boolean) {
         onClick = closing(action),
     )
 
+    // In a chain: pinning the page in its tab's space, and making it a favorite there, unless it is already.
+    val space = browser.spaces.firstOrNull { it.id == tab?.space }?.takeIf { browser.sync.joined && browser.sync.sidebar != null && Address.isWeb(page.url) }
+    val canPin = space != null && space.pinned.none { (it.item as? RowItem.Page)?.page?.url == page.url }
+    val canFavor = space != null && space.favorites.none { it.url == page.url }
+
     // As the wide bar's menu shows them; the narrow one's is the other way up.
-    val sections: List<@Composable () -> Unit> = listOf(
+    val sections: List<@Composable () -> Unit> = listOfNotNull(
         {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 IconButton(onClick = closing { page.view.goBack() }, enabled = page.canGoBack) {
@@ -474,6 +480,23 @@ fun PageMenu(browser: Browser, page: WebPage, floating: Boolean) {
                 trailingIcon = { Checkbox(checked = page.desktopSite, onCheckedChange = null) },
                 onClick = closing { page.askDesktopSite(!page.desktopSite) },
             )
+        },
+        // A desktop of the chain makes these (`Sync`).
+        if (space != null && (canPin || canFavor)) {
+            {
+                if (canPin) {
+                    entry("Pin in “${space.title}”", painterResource(R.drawable.ic_pin)) {
+                        browser.change { it.pin(page.url, page.title, space) }
+                    }
+                }
+                if (canFavor) {
+                    entry("Add to Favorites", painterResource(R.drawable.ic_space_star)) {
+                        browser.change { it.addFavorite(page.url, page.title, space) }
+                    }
+                }
+            }
+        } else {
+            null
         },
         {
             entry("Share", rememberVectorPainter(Icons.Default.Share)) { share(context, page.url) }

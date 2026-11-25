@@ -224,6 +224,17 @@ class Browser(
         save()
     }
 
+    /**
+     * Make a change to the chain's sidebar (`Sync`), then tell the chain at
+     * once, so a desktop makes it soon.
+     */
+    fun change(make: suspend (Sync) -> Unit) {
+        scope.launch {
+            make(sync)
+            shareTabs()
+        }
+    }
+
     /** Read the chain's sidebar, then tell the chain about the tabs here. */
     suspend fun syncNow() {
         sync.refresh()
@@ -358,7 +369,10 @@ class Browser(
         private const val PRIVATE = "private-"
 
         /** The space of a device that is in no chain. */
-        val HOME = Space("home", "Home", "home", null, "home", false, emptyList(), emptyList(), emptyList(), false)
+        val HOME = Space(
+            id = "home", title = "Home", icon = "home", accent = null, profileId = "home", ephemeral = false,
+            favorites = emptyList(), pinned = emptyList(), today = emptyList(), bookmarks = emptyList(), pending = false,
+        )
 
         private fun JSONArray.tabs() = (0 until length()).map { Tab.of(getJSONObject(it)) }
     }

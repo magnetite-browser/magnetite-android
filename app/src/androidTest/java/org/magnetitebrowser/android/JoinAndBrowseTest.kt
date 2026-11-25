@@ -8,6 +8,7 @@ import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -22,7 +23,8 @@ import java.net.URL
  * Joins the demo chain and opens a page from it. Needs the demo sync server
  * of magnetite-mobile-core on the machine the emulator runs on
  * (`cargo run --example demo_server`) and an app without data
- * (`scripts/test.sh` sees to that).
+ * (`scripts/test.sh` sees to that). The phone test changes the chain's
+ * sidebar: start the demo server again before the next run.
  */
 @RunWith(AndroidJUnit4::class)
 class JoinAndBrowseTest {
@@ -111,7 +113,7 @@ class JoinAndBrowseTest {
         tap(By.desc("Settings"))
         tap(By.text("Sync Now"))
         Thread.sleep(2_000)
-        assertTrue("the phone listed its tab", take() >= 1)
+        assertTrue("the phone listed its tab", demo("take") >= 1)
         tap(By.text("Sync Now"))
         Thread.sleep(2_000)
         tap(By.desc("Done"))
@@ -125,6 +127,44 @@ class JoinAndBrowseTest {
         tap(By.desc("Tabs"))
         find(By.text("OPEN HERE"))
         keep("7-site-icon")
+
+        // From the phone: pin the page from its menu, and rename a favorite
+        // by holding it. Both show at once, marked as waiting for a desktop.
+        tap(By.desc("Done"))
+        tap(By.desc("More"))
+        find(By.text("Pin in “Home”"))
+        keep("8-page-menu")
+        tap(By.text("Pin in “Home”"))
+        tap(By.desc("Tabs"))
+        find(By.desc("Waiting for your computer"))
+        find(By.text("Wikipedia")).longClick()
+        find(By.text("Rename…"))
+        keep("9-holding")
+        tap(By.text("Rename…"))
+        find(By.res("name")).text = "Wiki"
+        keep("10-renaming")
+        // The button, not the dialog's title.
+        tap(By.clickable(true).hasDescendant(By.text("Rename")))
+        assertTrue(device.wait(Until.gone(By.res("name")), 5_000))
+        find(By.text("Wiki"))
+        assertEquals(2, device.findObjects(By.desc("Waiting for your computer")).size)
+        keep("11-waiting")
+
+        // The chain hears of both, a desktop makes them, and after the next
+        // sync the marks are gone and the changes stay.
+        tap(By.desc("Settings"))
+        tap(By.text("Sync Now"))
+        Thread.sleep(2_000)
+        // More than two when the server still holds an earlier run's phone.
+        assertTrue("the phone listed its changes", demo("apply") >= 2)
+        tap(By.text("Sync Now"))
+        Thread.sleep(2_000)
+        tap(By.desc("Done"))
+        tap(By.desc("Tabs"))
+        find(By.text("Wiki"))
+        assertTrue(device.wait(Until.gone(By.desc("Waiting for your computer")), 10_000))
+        assertTrue(has(By.text("Wikipedia, the free encyclopedia")))
+        keep("12-made")
     }
 
     /** On a tablet the sidebar stays beside the page. */
@@ -175,11 +215,14 @@ class JoinAndBrowseTest {
 
     private fun tap(what: BySelector) = find(what).click()
 
-    /** The demo server plays a desktop that takes over every listed tab; how many it took. */
-    private fun take(): Int {
-        val request = URL("$server/demo/take").openConnection() as HttpURLConnection
+    /**
+     * The demo server plays a desktop: `take` takes over every listed tab,
+     * `apply` makes the changes the phones asked for. Returns how many.
+     */
+    private fun demo(action: String): Int {
+        val request = URL("$server/demo/$action").openConnection() as HttpURLConnection
         request.requestMethod = "POST"
-        // More than one when the server still holds an earlier run's phone.
+        // More than this phone's when the server still holds an earlier run's phone.
         return request.inputStream.bufferedReader().readText().trim().toIntOrNull() ?: 0
     }
 

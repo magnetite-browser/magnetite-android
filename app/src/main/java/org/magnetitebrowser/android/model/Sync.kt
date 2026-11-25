@@ -12,18 +12,26 @@ import kotlinx.coroutines.withContext
 import uniffi.magnetite_mobile_core.Device
 import uniffi.magnetite_mobile_core.DeviceTab
 import uniffi.magnetite_mobile_core.Sidebar
+import uniffi.magnetite_mobile_core.Space
 import uniffi.magnetite_mobile_core.SyncException
 import uniffi.magnetite_mobile_core.cached
+import uniffi.magnetite_mobile_core.addFavorite
 import uniffi.magnetite_mobile_core.exchange
 import uniffi.magnetite_mobile_core.forget
 import uniffi.magnetite_mobile_core.join as joinChain
+import uniffi.magnetite_mobile_core.newSpace
+import uniffi.magnetite_mobile_core.pin
 import uniffi.magnetite_mobile_core.refresh
+import uniffi.magnetite_mobile_core.remove
+import uniffi.magnetite_mobile_core.rename
 import java.io.File
 import java.util.UUID
 
 /**
  * This device's place in a sync chain. It reads the chain's sidebar and
- * never writes to it (see the core's notes on why).
+ * never writes to it (see the core's notes on why); its changes to the
+ * sidebar go to a desktop of the chain, which makes them, and show at once
+ * marked `pending` until then.
  */
 class Sync(context: Context) {
     var sidebar by mutableStateOf<Sidebar?>(null)
@@ -119,8 +127,9 @@ class Sync(context: Context) {
     }
 
     /**
-     * Tell the chain which `tabs` are open here. Returns the ids of those
-     * another device took over; none when it could not be asked.
+     * Tell the chain which `tabs` are open here, and the changes to the
+     * sidebar no desktop made yet. Returns the ids of the tabs another device
+     * took over; none when it could not be asked.
      */
     suspend fun exchange(tabs: List<DeviceTab>): List<String> {
         val server = server ?: return emptyList()
@@ -131,6 +140,32 @@ class Sync(context: Context) {
         } catch (e: Exception) {
             lastError = text(e)
             emptyList()
+        }
+    }
+
+    // Changes to the sidebar
+
+    /** Pin `url` last in `space`'s pinned tree. */
+    suspend fun pin(url: String, title: String, space: Space) = change { pin(it, space.id, url, title) }
+
+    /** Make `url` a favorite of `space`'s profile. */
+    suspend fun addFavorite(url: String, title: String, space: Space) = change { addFavorite(it, space.id, url, title) }
+
+    /** A new space after the others, with the desktop's default icon. */
+    suspend fun newSpace(title: String) = change { newSpace(it, title, null) }
+
+    /** Name the space, folder, pinned page or favorite `item` `title`. */
+    suspend fun rename(item: String, title: String) = change { rename(it, item, title) }
+
+    /** Unpin pinned page `item`, or remove favorite `item`. */
+    suspend fun remove(item: String) = change { remove(it, item) }
+
+    /** Keep a change for the desktop (`make` gets the core's folder) and show the sidebar with it. */
+    private suspend fun change(make: (String) -> Sidebar?) {
+        try {
+            withContext(Dispatchers.IO) { make(dir) }?.let { sidebar = it }
+        } catch (e: Exception) {
+            lastError = text(e)
         }
     }
 
