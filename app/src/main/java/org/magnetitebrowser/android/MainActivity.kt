@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity(), WebPage.Host {
             KeyEvent.KEYCODE_T -> browser.newTab()
             KeyEvent.KEYCODE_W -> tab?.let(browser::close)
             KeyEvent.KEYCODE_R -> tab?.let { browser.page(it).reload() }
+            KeyEvent.KEYCODE_F -> tab?.let { browser.page(it).startFinding() }
             else -> return super.onKeyShortcut(keyCode, event)
         }
         return true

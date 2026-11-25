@@ -35,6 +35,9 @@ fun MagnetiteTheme(tint: Color?, content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = colors, content = content)
 }
 
+/** Whether text on this colour reads better light; the iOS app's measure. */
+val Color.isDark get() = 0.299f * red + 0.587f * green + 0.114f * blue < 0.5f
+
 /** The space's colour; none: the app's own. */
 val Space.tint: Color? get() = accent?.let { Color(it.red, it.green, it.blue) }
 

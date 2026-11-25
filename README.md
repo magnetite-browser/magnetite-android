@@ -47,10 +47,11 @@ tabs the device lists.
   what the address field's text means (`Address`), site icons (`Favicons`:
   kept when a page of the site was loaded here; a row never contacts a site).
 - `web/`: one tab's web view and its state.
-- `ui/`: the page with its bar, the sidebar, joining (by typing the 24 words
-  or by scanning the QR code a computer shows beside them), settings. On a
-  wide screen (tablet) the sidebar is a column beside the page; on a narrow
-  one it is the start page and a sheet.
+- `ui/`: the page with its bars (`Bars.kt`), the sidebar, joining (by typing
+  the 24 words or by scanning the QR code a computer shows beside them),
+  settings. On a wide screen (tablet) the sidebar is a column beside the page;
+  on a narrow one it is the start page and a sheet, and the bar floats over
+  the page's bottom.
 - `core/`: generated, not in the repository.
 
 Each profile of the chain is a profile of the web engine, so spaces keep
@@ -60,7 +61,8 @@ private.
 
 ## Licence
 
-[EUPL-1.2](LICENSE), as Magnetite itself. The folder, computer and link
-icons in `app/src/main/res/drawable` are from Google's
+[EUPL-1.2](LICENSE), as Magnetite itself. The folder, computer, desktop,
+link, find, text size and not-secure icons in `app/src/main/res/drawable`
+are from Google's
 [Material Icons](https://github.com/google/material-design-icons) (Apache-2.0).
 QR codes are read with [ZXing](https://github.com/zxing/zxing) (Apache-2.0).

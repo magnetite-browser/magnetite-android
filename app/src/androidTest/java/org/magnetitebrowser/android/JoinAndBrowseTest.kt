@@ -71,6 +71,20 @@ class JoinAndBrowseTest {
         assertTrue(has(By.text("example.org")))
         keep("3-page")
 
+        // Find on Page takes the bar's place and counts the matches.
+        tap(By.desc("More"))
+        tap(By.text("Find on Page"))
+        find(By.res("find")).text = "Example"
+        find(By.textStartsWith("1 of"))
+        tap(By.desc("Done"))
+
+        // New Tab: the start page, typing an address. Picking a page ends the typing.
+        tap(By.desc("More"))
+        tap(By.text("New Tab"))
+        find(By.res("address").focused(true))
+        tap(By.text("Example Domain"))
+        find(By.text("example.org"))
+
         // The tab is listed as open here, in the space it was opened from.
         tap(By.desc("Tabs"))
         find(By.text("OPEN HERE"))
