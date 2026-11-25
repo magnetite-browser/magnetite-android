@@ -138,9 +138,10 @@ private fun Narrow(browser: Browser, page: WebPage?, sidebar: @Composable (Boole
         if (tab != null && page != null) {
             key(tab.id) {
                 // Find on Page's bar sits on the keyboard: the page ends above it.
+                // In the order the bar picks what it shows.
                 val bottom = when {
-                    address.editing -> resting
                     page.finding -> maxOf(keyboard + FindBarHeight, resting)
+                    address.editing -> resting
                     else -> maxOf(keyboard, resting)
                 }
                 PageView(page, Modifier.windowInsetsPadding(above).padding(bottom = bottom))
