@@ -131,10 +131,13 @@ class Browser(
      * Open `url` in a new tab of the space in front and show it; with
      * `inBackground`, behind the tab in front.
      */
-    fun open(url: String, origin: String? = null, inBackground: Boolean = false) {
-        val tab = Tab(space = space.id, url = url, origin = origin)
+    fun open(url: String, origin: String? = null, inBackground: Boolean = false, space: String = this.space.id) {
+        val tab = Tab(space = space, url = url, origin = origin)
         tabs = listOf(tab) + tabs
-        if (!inBackground) front = tab.id
+        if (!inBackground) {
+            front = tab.id
+            spaceId = tab.space
+        }
         save()
     }
 
@@ -192,8 +195,8 @@ class Browser(
     // Other devices
 
     /** Hand `url` to the desktop without opening it here. */
-    fun sendToDesktop(url: String) {
-        sent = listOf(Tab(space = space.id, url = url)) + sent
+    fun sendToDesktop(url: String, space: String = this.space.id) {
+        sent = listOf(Tab(space = space, url = url)) + sent
         save()
         scope.launch { shareTabs() }
     }

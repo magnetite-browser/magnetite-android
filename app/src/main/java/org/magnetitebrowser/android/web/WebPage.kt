@@ -108,9 +108,24 @@ class WebPage(
 
     /**
      * What `site` asks to do (`what`: "use your camera"…); `answer` takes the
-     * reader's choice. Android asks once more for the app itself.
+     * reader's choice, once: a request may be answered only once. Android
+     * asks once more for the app itself. `request` is what the page asked
+     * with, so that only its own cancelling ends the question.
      */
-    class Ask(val site: String, val what: String, val answer: (Boolean) -> Unit)
+    class Ask(val site: String, val what: String, val request: Any, private val onAnswer: (Boolean) -> Unit) {
+        private var done = false
+
+        fun answer(allowed: Boolean) {
+            if (done) return
+            done = true
+            onAnswer(allowed)
+        }
+
+        /** The page took the request back: it gets no answer. */
+        fun cancel() {
+            done = true
+        }
+    }
 
     /** Called when the address or title changed. */
     var changed: ((url: String, title: String) -> Unit)? = null
@@ -386,26 +401,32 @@ class WebPage(
                 2 -> "use your camera and microphone"
                 else -> if (PermissionRequest.RESOURCE_VIDEO_CAPTURE in wanted) "use your camera" else "use your microphone"
             }
-            ask(request.origin.host ?: request.origin.toString(), what, wanted.values.toList()) { granted ->
+            ask(request.origin.host ?: request.origin.toString(), what, request, wanted.values.toList()) { granted ->
                 val allowed = wanted.filterValues { it in granted }.keys
                 if (allowed.isEmpty()) request.deny() else request.grant(allowed.toTypedArray())
             }
         }
 
         override fun onPermissionRequestCanceled(request: PermissionRequest) {
-            asking = null
+            asking?.takeIf { it.request === request }?.let {
+                it.cancel()
+                asking = null
+            }
         }
 
         /** The location, for a map for example. Asked again at the next request. */
         override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
             val location = listOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
-            ask(origin.toUri().host ?: origin, "know where you are", location) { granted ->
+            ask(origin.toUri().host ?: origin, "know where you are", callback, location) { granted ->
                 callback.invoke(origin, granted.isNotEmpty(), false)
             }
         }
 
         override fun onGeolocationPermissionsHidePrompt() {
-            asking = null
+            asking?.takeIf { it.request is GeolocationPermissions.Callback }?.let {
+                it.cancel()
+                asking = null
+            }
         }
     }
 
@@ -414,12 +435,14 @@ class WebPage(
      * `permissions`; `done` gets those granted, none for a no. A question
      * still open is answered no.
      */
-    private fun ask(site: String, what: String, permissions: List<String>, done: (Set<String>) -> Unit) {
+    private fun ask(site: String, what: String, request: Any, permissions: List<String>, done: (Set<String>) -> Unit) {
         asking?.answer(false)
-        asking = Ask(site, what) { allowed ->
-            asking = null
+        lateinit var mine: Ask
+        mine = Ask(site, what, request) { allowed ->
+            if (asking === mine) asking = null
             if (allowed) host.askPermissions(permissions, done) else done(emptySet())
         }
+        asking = mine
     }
 }
 

@@ -263,6 +263,10 @@ private fun PageView(browser: Browser, page: WebPage, modifier: Modifier = Modif
 @Composable
 private fun LinkMenu(browser: Browser, link: WebPage.HeldLink, close: () -> Unit) {
     val context = LocalContext.current
+    // The page shown is the tab in front's: its links go to its space, not
+    // to the one the sidebar shows (a private page's links stay private).
+    val space = browser.frontTab?.space ?: browser.space.id
+    val private = browser.spaces.firstOrNull { it.id == space }?.ephemeral == true
     @Composable
     fun entry(label: String, icon: Painter, action: () -> Unit) = DropdownMenuItem(
         text = { Text(label) },
@@ -282,12 +286,13 @@ private fun LinkMenu(browser: Browser, link: WebPage.HeldLink, close: () -> Unit
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
             HorizontalDivider()
-            entry("Open in New Tab", painterResource(R.drawable.ic_open_new_tab)) { browser.open(link.url) }
+            entry("Open in New Tab", painterResource(R.drawable.ic_open_new_tab)) { browser.open(link.url, space = space) }
             entry("Open in Background", painterResource(R.drawable.ic_open_background)) {
-                browser.open(link.url, inBackground = true)
+                browser.open(link.url, inBackground = true, space = space)
             }
-            if (browser.sync.joined) {
-                entry("Send to Desktop", painterResource(R.drawable.ic_desktop)) { browser.sendToDesktop(link.url) }
+            // Tabs of private spaces are never listed for the other devices.
+            if (browser.sync.joined && !private) {
+                entry("Send to Desktop", painterResource(R.drawable.ic_desktop)) { browser.sendToDesktop(link.url, space) }
             }
             HorizontalDivider()
             entry("Copy Link", painterResource(R.drawable.ic_link)) { copy(context, link.url) }
