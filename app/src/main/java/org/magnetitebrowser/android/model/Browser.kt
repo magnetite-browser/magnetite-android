@@ -369,7 +369,10 @@ class Browser(
         private const val PRIVATE = "private-"
 
         /** The space of a device that is in no chain. */
-        val HOME = Space("home", "Home", "home", null, "home", false, emptyList(), emptyList(), emptyList(), false)
+        val HOME = Space(
+            id = "home", title = "Home", icon = "home", accent = null, profileId = "home", ephemeral = false,
+            favorites = emptyList(), pinned = emptyList(), today = emptyList(), bookmarks = emptyList(), pending = false,
+        )
 
         private fun JSONArray.tabs() = (0 until length()).map { Tab.of(getJSONObject(it)) }
     }
