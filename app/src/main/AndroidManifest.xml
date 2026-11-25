@@ -2,12 +2,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- To scan the QR code of a sync code; a device without a camera can type the words. -->
+    <!-- To scan the QR code of a sync code (a device without a camera can type
+         the words), and for websites the reader allows, each asking first:
+         the camera and microphone for a call, the location for a map. -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <!-- The permission alone would make a camera with autofocus required. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- The permissions alone would make a camera with autofocus, a microphone
+         and a location fix required. -->
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.location.network" android:required="false" />
 
     <!-- A browser opens pages without https too, so cleartext is allowed.
          Nothing of the app's data is in the system's backup: tabs, cookies

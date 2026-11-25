@@ -127,11 +127,14 @@ class Browser(
 
     // Tabs
 
-    /** Open `url` in a new tab of the space in front and show it. */
-    fun open(url: String, origin: String? = null) {
+    /**
+     * Open `url` in a new tab of the space in front and show it; with
+     * `inBackground`, behind the tab in front.
+     */
+    fun open(url: String, origin: String? = null, inBackground: Boolean = false) {
         val tab = Tab(space = space.id, url = url, origin = origin)
         tabs = listOf(tab) + tabs
-        front = tab.id
+        if (!inBackground) front = tab.id
         save()
     }
 
@@ -141,10 +144,16 @@ class Browser(
         if (tab != null) show(tab) else open(page.url, page.id)
     }
 
+    /** The search engine Settings chose, as a template (`Address.engines`). */
+    val searchTemplate: String get() = sync.prefs.getString(SEARCH, null) ?: Address.engines[0].second
+
     /** Go to what the address field holds: in the tab in front, else a new one. */
     fun go(text: String) {
-        val template = sync.prefs.getString(SEARCH, null) ?: Address.engines[0].second
-        val url = Address.url(text, template) ?: return
+        Address.url(text, searchTemplate)?.let(::load)
+    }
+
+    /** Load `url` in the tab in front, else in a new one. */
+    fun load(url: String) {
         val tab = frontTab
         if (tab != null) page(tab).view.loadUrl(url) else open(url)
     }
@@ -181,6 +190,13 @@ class Browser(
     fun closeAll(space: Space) = tabs(space).forEach(::close)
 
     // Other devices
+
+    /** Hand `url` to the desktop without opening it here. */
+    fun sendToDesktop(url: String) {
+        sent = listOf(Tab(space = space.id, url = url)) + sent
+        save()
+        scope.launch { shareTabs() }
+    }
 
     /**
      * Hand `tab` to the desktop: it closes here and waits in `sent` until a
@@ -339,7 +355,7 @@ class Browser(
         private const val PRIVATE = "private-"
 
         /** The space of a device that is in no chain. */
-        val HOME = Space("home", "Home", null, null, "home", false, emptyList(), emptyList(), emptyList())
+        val HOME = Space("home", "Home", "home", null, "home", false, emptyList(), emptyList(), emptyList())
 
         private fun JSONArray.tabs() = (0 until length()).map { Tab.of(getJSONObject(it)) }
     }
