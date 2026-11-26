@@ -226,7 +226,7 @@ class Browser(
 
     /**
      * Make a change to the chain's sidebar (`Sync`), then tell the chain at
-     * once, so a desktop makes it soon.
+     * once.
      */
     fun change(make: suspend (Sync) -> Unit) {
         scope.launch {

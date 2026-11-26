@@ -37,7 +37,7 @@ import org.magnetitebrowser.android.model.Address
 import org.magnetitebrowser.android.model.Browser
 
 @Composable
-fun SettingsView(browser: Browser, onJoin: () -> Unit, onDone: () -> Unit) {
+fun SettingsView(browser: Browser, onJoin: () -> Unit, onArchive: () -> Unit, onDone: () -> Unit) {
     val sync = browser.sync
     var search by remember {
         mutableStateOf(browser.searchTemplate)
@@ -81,6 +81,8 @@ fun SettingsView(browser: Browser, onJoin: () -> Unit, onDone: () -> Unit) {
                     browser.shareTabsSoon()
                 })
             }
+            OutlinedButton(onClick = onArchive) { Text("Archive…") }
+            Hint("The tabs closed on your devices, and what you removed from the sidebar here. A tab can be brought back from it.")
             Row {
                 OutlinedButton(onClick = browser::syncSoon, enabled = !sync.busy) { Text("Sync Now") }
                 TextButton(onClick = { leaving = true }, Modifier.padding(start = 8.dp)) {
@@ -89,7 +91,7 @@ fun SettingsView(browser: Browser, onJoin: () -> Unit, onDone: () -> Unit) {
             }
             val error = sync.lastError
             Hint(
-                error ?: "What you change in the sidebar here, your computer makes when it syncs. Your other devices can list the tabs open here and take one over; tabs of private spaces are never listed.",
+                error ?: "What you change in the sidebar here reaches your other devices when they sync. They can list the tabs open here and take one over; tabs of private spaces are never listed.",
                 error = error != null,
             )
         }

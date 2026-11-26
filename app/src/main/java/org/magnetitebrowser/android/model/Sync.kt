@@ -9,32 +9,40 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import uniffi.magnetite_mobile_core.Archived
 import uniffi.magnetite_mobile_core.Device
 import uniffi.magnetite_mobile_core.DeviceTab
 import uniffi.magnetite_mobile_core.Sidebar
 import uniffi.magnetite_mobile_core.Space
 import uniffi.magnetite_mobile_core.SyncException
 import uniffi.magnetite_mobile_core.cached
+import uniffi.magnetite_mobile_core.cachedArchive
 import uniffi.magnetite_mobile_core.addFavorite
 import uniffi.magnetite_mobile_core.exchange
 import uniffi.magnetite_mobile_core.forget
+import uniffi.magnetite_mobile_core.forgetArchived
 import uniffi.magnetite_mobile_core.join as joinChain
 import uniffi.magnetite_mobile_core.newSpace
 import uniffi.magnetite_mobile_core.pin
 import uniffi.magnetite_mobile_core.refresh
+import uniffi.magnetite_mobile_core.refreshArchive
 import uniffi.magnetite_mobile_core.remove
 import uniffi.magnetite_mobile_core.rename
+import uniffi.magnetite_mobile_core.restore
 import java.io.File
 import java.util.UUID
 
 /**
  * This device's place in a sync chain. It reads the chain's sidebar and
- * never writes to it (see the core's notes on why); its changes to the
- * sidebar go to a desktop of the chain, which makes them, and show at once
- * marked `pending` until then.
+ * archive. Its changes to them show at once, marked `pending`, and the core
+ * writes them into the chain with the next `exchange` (see the core's notes
+ * on how, and on when a desktop is asked to make them).
  */
 class Sync(context: Context) {
     var sidebar by mutableStateOf<Sidebar?>(null)
+        private set
+    /** The chain's closed tabs, newest first. */
+    var archive by mutableStateOf<List<Archived>>(emptyList())
         private set
     var server by mutableStateOf<String?>(null)
         private set
@@ -60,6 +68,7 @@ class Sync(context: Context) {
         if (known != null && secret.read() != null) {
             server = known
             sidebar = runCatching { cached(dir) }.getOrNull()
+            archive = runCatching { cachedArchive(dir) }.getOrDefault(emptyList())
         }
     }
 
@@ -88,6 +97,7 @@ class Sync(context: Context) {
         runCatching { forget(dir) }
         server = null
         sidebar = null
+        archive = emptyList()
         lastError = null
         lastSync = null
     }
@@ -99,6 +109,7 @@ class Sync(context: Context) {
         busy = true
         try {
             withContext(Dispatchers.IO) { refresh(server, code, dir) }?.let { sidebar = it }
+            archive = withContext(Dispatchers.IO) { refreshArchive(server, code, dir) }
             lastError = null
             lastSync = System.currentTimeMillis()
         } catch (e: Exception) {
@@ -127,16 +138,20 @@ class Sync(context: Context) {
     }
 
     /**
-     * Tell the chain which `tabs` are open here, and the changes to the
-     * sidebar no desktop made yet. Returns the ids of the tabs another device
-     * took over; none when it could not be asked.
+     * Write the changes made here into the chain, and tell it which `tabs`
+     * are open here. Returns the ids of the tabs another device took over;
+     * none when it could not be asked.
      */
     suspend fun exchange(tabs: List<DeviceTab>): List<String> {
         val server = server ?: return emptyList()
         val code = secret.read() ?: return emptyList()
         val device = device()
         return try {
-            withContext(Dispatchers.IO) { exchange(server, code, device, tabs, dir) }
+            val taken = withContext(Dispatchers.IO) { exchange(server, code, device, tabs, dir) }
+            // What was written is no longer waiting. Not after leaving the
+            // chain meanwhile: the core's folder is empty then.
+            if (joined) show()
+            taken
         } catch (e: Exception) {
             lastError = text(e)
             emptyList()
@@ -157,13 +172,36 @@ class Sync(context: Context) {
     /** Name the space, folder, pinned page or favorite `item` `title`. */
     suspend fun rename(item: String, title: String) = change { rename(it, item, title) }
 
-    /** Unpin pinned page `item`, or remove favorite `item`. */
+    /** Unpin pinned page `item`, or remove favorite `item`. It goes to the archive. */
     suspend fun remove(item: String) = change { remove(it, item) }
 
-    /** Keep a change for the desktop (`make` gets the core's folder) and show the sidebar with it. */
+    /** Bring archived tab `item` back as a Today tab of its space. */
+    suspend fun restore(item: String) = change { restore(it, item) }
+
+    /** Remove archived tab `item` from the archive for good. */
+    suspend fun forgetArchived(item: String) = change {
+        forgetArchived(it, item)
+        cached(it)
+    }
+
+    /** Show the sidebar and archive as the core keeps them now. */
+    private suspend fun show() {
+        val (kept, closed) = withContext(Dispatchers.IO) {
+            runCatching { cached(dir) }.getOrNull() to runCatching { cachedArchive(dir) }.getOrNull()
+        }
+        kept?.let { sidebar = it }
+        closed?.let { archive = it }
+    }
+
+    /**
+     * Keep a change until it is written (`make` gets the core's folder) and
+     * show the sidebar and archive with it.
+     */
     private suspend fun change(make: (String) -> Sidebar?) {
         try {
-            withContext(Dispatchers.IO) { make(dir) }?.let { sidebar = it }
+            val (shown, closed) = withContext(Dispatchers.IO) { make(dir) to cachedArchive(dir) }
+            shown?.let { sidebar = it }
+            archive = closed
         } catch (e: Exception) {
             lastError = text(e)
         }
