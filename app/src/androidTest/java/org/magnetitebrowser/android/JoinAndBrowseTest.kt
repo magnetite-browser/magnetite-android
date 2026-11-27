@@ -165,6 +165,28 @@ class JoinAndBrowseTest {
         assertTrue(device.wait(Until.gone(By.desc("Waiting to sync")), 10_000))
         assertTrue(has(By.text("Wikipedia, the free encyclopedia")))
         keep("12-made")
+
+        // A favorite removed here goes to the chain's archive, and a tap
+        // there brings it back as a tab and takes it out of the archive.
+        find(By.text("Wiki")).longClick()
+        tap(By.text("Remove from Favorites"))
+        assertTrue(device.wait(Until.gone(By.text("Wiki")), 5_000))
+        assertTrue(device.wait(Until.gone(By.desc("Waiting to sync")), 10_000))
+        tap(By.desc("Settings"))
+        tap(By.text("Archive…"))
+        find(By.text("Search Archive"))
+        find(By.text("Wiki"))
+        keep("13-archive")
+        tap(By.text("Wiki"))
+        find(By.textContains("wikipedia.org"), 30_000)
+        keep("14-brought-back")
+        tap(By.desc("Tabs"))
+        assertTrue(device.wait(Until.gone(By.desc("Waiting to sync")), 10_000))
+        tap(By.desc("Settings"))
+        tap(By.text("Archive…"))
+        find(By.text("Search Archive"))
+        assertTrue("still in the archive", !has(By.text("Wiki")))
+        keep("15-archive-after")
     }
 
     /** On a tablet the sidebar stays beside the page. */
