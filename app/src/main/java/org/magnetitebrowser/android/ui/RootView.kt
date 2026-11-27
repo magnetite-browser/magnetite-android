@@ -73,7 +73,7 @@ import org.magnetitebrowser.android.model.Browser
 import org.magnetitebrowser.android.web.WebPage
 
 /** What covers the whole app while it is open. */
-private enum class Over { Nothing, Settings, Join }
+private enum class Over { Nothing, Settings, Join, Archive }
 
 /**
  * On a narrow screen (a phone, a tablet window beside another app): the page
@@ -115,7 +115,13 @@ fun RootView(browser: Browser) {
         if (over != Over.Nothing) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).safeDrawingPadding()) {
                 when (over) {
-                    Over.Settings -> SettingsView(browser, onJoin = { over = Over.Join }, onDone = { over = Over.Nothing })
+                    Over.Settings -> SettingsView(
+                        browser,
+                        onJoin = { over = Over.Join },
+                        onArchive = { over = Over.Archive },
+                        onDone = { over = Over.Nothing },
+                    )
+                    Over.Archive -> ArchiveView(browser, onDone = { over = Over.Nothing })
                     Over.Join -> JoinView(browser, onDone = { over = Over.Nothing })
                     Over.Nothing -> {}
                 }

@@ -160,7 +160,7 @@ fun SidebarView(
 /** Something being named: item `id` to rename, with its name so far, or a new space (no `id`). */
 private data class Naming(val id: String?, val title: String)
 
-/** A name for `item`; the change goes to a desktop of the chain. */
+/** A name for `item`; the change is written into the chain. */
 @Composable
 private fun NameDialog(browser: Browser, item: Naming, close: () -> Unit) {
     var name by remember { mutableStateOf(TextFieldValue(item.title, TextRange(0, item.title.length))) }
@@ -563,7 +563,7 @@ private fun FolderRow(title: String, smart: Boolean, open: Boolean, pending: Boo
     }
 }
 
-/** Something holding an item offers: a change for a desktop of the chain to make. */
+/** Something holding an item offers: a change to the chain's sidebar. */
 private class Edit(val label: String, val icon: Painter, val danger: Boolean = false, val run: () -> Unit)
 
 /**
@@ -595,7 +595,7 @@ private fun Holdable(edits: List<Edit>, modifier: Modifier = Modifier, content: 
 @Composable
 private fun Waiting(modifier: Modifier = Modifier) {
     Icon(
-        painterResource(R.drawable.ic_waiting), "Waiting for your computer",
+        painterResource(R.drawable.ic_waiting), "Waiting to sync",
         modifier
             .size(18.dp)
             .background(MaterialTheme.colorScheme.background, CircleShape)

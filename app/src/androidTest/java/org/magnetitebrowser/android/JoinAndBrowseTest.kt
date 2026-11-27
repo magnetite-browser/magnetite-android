@@ -129,14 +129,15 @@ class JoinAndBrowseTest {
         keep("7-site-icon")
 
         // From the phone: pin the page from its menu, and rename a favorite
-        // by holding it. Both show at once, marked as waiting for a desktop.
+        // by holding it. Both show at once, and the mark that they wait
+        // goes as soon as the phone wrote them into the chain.
         tap(By.desc("Done"))
         tap(By.desc("More"))
         find(By.text("Pin in “Home”"))
         keep("8-page-menu")
         tap(By.text("Pin in “Home”"))
         tap(By.desc("Tabs"))
-        find(By.desc("Waiting for your computer"))
+        assertTrue(device.wait(Until.gone(By.desc("Waiting to sync")), 10_000))
         find(By.text("Wikipedia")).longClick()
         find(By.text("Rename…"))
         keep("9-holding")
@@ -147,24 +148,45 @@ class JoinAndBrowseTest {
         tap(By.clickable(true).hasDescendant(By.text("Rename")))
         assertTrue(device.wait(Until.gone(By.res("name")), 5_000))
         find(By.text("Wiki"))
-        assertEquals(2, device.findObjects(By.desc("Waiting for your computer")).size)
-        keep("11-waiting")
+        assertTrue(device.wait(Until.gone(By.desc("Waiting to sync")), 10_000))
+        keep("11-written")
 
-        // The chain hears of both, a desktop makes them, and after the next
-        // sync the marks are gone and the changes stay.
+        // The phone wrote both itself: no desktop is asked to make them,
+        // and they are still there after a sync.
         tap(By.desc("Settings"))
         tap(By.text("Sync Now"))
         Thread.sleep(2_000)
-        // More than two when the server still holds an earlier run's phone.
-        assertTrue("the phone listed its changes", demo("apply") >= 2)
+        assertEquals("nothing left for a desktop", 0, demo("apply"))
         tap(By.text("Sync Now"))
         Thread.sleep(2_000)
         tap(By.desc("Done"))
         tap(By.desc("Tabs"))
         find(By.text("Wiki"))
-        assertTrue(device.wait(Until.gone(By.desc("Waiting for your computer")), 10_000))
+        assertTrue(device.wait(Until.gone(By.desc("Waiting to sync")), 10_000))
         assertTrue(has(By.text("Wikipedia, the free encyclopedia")))
         keep("12-made")
+
+        // A favorite removed here goes to the chain's archive, and a tap
+        // there brings it back as a tab and takes it out of the archive.
+        find(By.text("Wiki")).longClick()
+        tap(By.text("Remove from Favorites"))
+        assertTrue(device.wait(Until.gone(By.text("Wiki")), 5_000))
+        assertTrue(device.wait(Until.gone(By.desc("Waiting to sync")), 10_000))
+        tap(By.desc("Settings"))
+        tap(By.text("Archive…"))
+        find(By.text("Search Archive"))
+        find(By.text("Wiki"))
+        keep("13-archive")
+        tap(By.text("Wiki"))
+        find(By.textContains("wikipedia.org"), 30_000)
+        keep("14-brought-back")
+        tap(By.desc("Tabs"))
+        assertTrue(device.wait(Until.gone(By.desc("Waiting to sync")), 10_000))
+        tap(By.desc("Settings"))
+        tap(By.text("Archive…"))
+        find(By.text("Search Archive"))
+        assertTrue("still in the archive", !has(By.text("Wiki")))
+        keep("15-archive-after")
     }
 
     /** On a tablet the sidebar stays beside the page. */
